@@ -1,0 +1,31 @@
+[package]
+name = "trustme-admin"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.104"
+argon2 = "0.6.0"
+axum = "0.8"
+axum-extra = { version = "0.12.6", features = ["cookie"] }
+chacha20poly1305 = "0.11.0"
+getrandom = "0.4.3"
+hex = "0.4.3"
+mime_guess = "2.0.5"
+rust-embed = { version = "8.13.0", features = ["mime-guess"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros", "json"] }
+subtle = "2.6.1"
+tokio = { version = "1.53.3", features = ["full"] }
+totp-rs = { version = "6.0.0", features = ["otpauth", "gen_secret"] }
+tower-http = { version = "0.7.1", features = ["set-header", "limit", "trace"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
+trust_message_tcp = { git = "https://github.com/Darkildo/trustme_backend", rev = "51ae69f", version = "0.5.0" }
+ulid = "3.0.0"
+zeroize = "1.9.1"
+
+[dev-dependencies]
+tower = { version = "0.5.3", features = ["util"] }

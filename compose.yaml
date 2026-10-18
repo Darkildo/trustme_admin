@@ -1,0 +1,20 @@
+# Админка одной командой:
+#
+#   docker compose up -d && docker compose logs admin | grep setup
+#
+# Ссылку первичной настройки из лога откройте в браузере. Наружу порт
+# опубликован только на 127.0.0.1: для доступа из сети поставьте перед
+# админкой прокси с TLS (пример — в README) и задайте TM_ADMIN_PUBLIC_URL.
+services:
+  admin:
+    build: .
+    image: trustme-admin:local
+    container_name: trustme-admin
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8088:8088"
+    environment:
+      TM_ADMIN_PUBLIC_URL: ${TM_ADMIN_PUBLIC_URL:-http://127.0.0.1:8088}
+      TM_ADMIN_TRUST_PROXY: ${TM_ADMIN_TRUST_PROXY:-false}
+    volumes:
+      - ./data:/srv/trustme-admin/data
