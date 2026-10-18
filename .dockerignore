@@ -1,0 +1,9 @@
+target
+data
+.git
+web/node_modules
+web/dist
+*.db
+secret.key
+.env
+.env.*

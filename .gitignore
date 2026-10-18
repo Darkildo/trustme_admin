@@ -1,0 +1,11 @@
+/target
+/data
+web/node_modules
+web/dist
+web/coverage
+*.db
+*.db-shm
+*.db-wal
+secret.key
+.env
+.env.*
