@@ -47,6 +47,8 @@ export function Hero({
     icon: typeof CircleCheck;
     text: string;
     n: number;
+    /** Своя окраска вместо тона: «Ожидает установки» — accent-2, как ProvisioningBadge. */
+    cls?: string;
   }> = [
     { key: "ok", tone: "ok", icon: CircleCheck, text: t("overview.ok", { count: ok }), n: ok },
     {
@@ -76,6 +78,7 @@ export function Hero({
     parts.push({
       key: "provisioning",
       tone: "unknown",
+      cls: "bg-accent-2/10 text-accent-2",
       icon: Hourglass,
       text: t("overview.provisioning", { count: provisioning }),
       n: provisioning,
@@ -132,7 +135,7 @@ export function Hero({
                     className={cn(
                       "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-medium tabular",
                       p.n > 0
-                        ? [TONE_CLASSES[p.tone].text, TONE_CLASSES[p.tone].bg]
+                        ? (p.cls ?? [TONE_CLASSES[p.tone].text, TONE_CLASSES[p.tone].bg])
                         : "text-fg-subtle",
                     )}
                   >

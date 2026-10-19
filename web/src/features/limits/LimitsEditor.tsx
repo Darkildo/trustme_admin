@@ -407,6 +407,10 @@ export function LimitsEditor({
     return out;
   }, [catalog, values, filter, q, t]);
 
+  // Ошибку `key: …` показывает сама строка; баннер — только если строки не видно.
+  const serverRowShown =
+    serverKey !== null && groups.some((g) => g.settings.some((s) => s.key === serverKey));
+
   const inheritedOf = (s: Setting): Inherited =>
     layer === "override" && profileSettings[s.key] !== undefined
       ? { value: profileSettings[s.key]!, source: "profile" }
@@ -478,7 +482,7 @@ export function LimitsEditor({
         })}
       </nav>
 
-      {serverMessage && (
+      {serverMessage && !serverRowShown && (
         <p
           role="alert"
           className="flex items-start gap-2 rounded-md border border-fail/30 bg-fail-soft px-3 py-2 text-sm text-fg"

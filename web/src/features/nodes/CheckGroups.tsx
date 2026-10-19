@@ -97,7 +97,10 @@ export function CheckGroups({ checks }: { checks: Check[] }) {
               >
                 <Icon className={cn("size-4", TONE_CLASSES[tone].text)} aria-hidden />
               </span>
-              <h3 id={`group-${g.key}`} className="text-sm font-semibold text-fg">
+              <h3
+                id={`group-${g.key}`}
+                className="text-[13px] font-semibold tracking-wide text-fg-muted uppercase"
+              >
                 {t(`checks.groups.${g.key}`)}
               </h3>
               <span className="ml-auto flex items-center gap-1.5">

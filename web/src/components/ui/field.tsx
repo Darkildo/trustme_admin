@@ -19,7 +19,8 @@ export function Field({ label, hint, error, className, children }: FieldProps) {
   const id = React.useId();
   const hintId = hint ? `${id}-hint` : undefined;
   const errorId = error ? `${id}-error` : undefined;
-  const describedBy = [errorId, hintId].filter(Boolean).join(" ") || undefined;
+  // При ошибке подсказка не показывается, поэтому ссылаемся только на ошибку.
+  const describedBy = errorId ?? hintId;
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
       <Label htmlFor={id}>{label}</Label>

@@ -21,6 +21,8 @@ export const buttonVariants = cva(
         "icon-sm": "size-8 rounded-sm",
       },
     },
+    // Ссылке не нужны высота и отступы от size: иначе twMerge оставляет h-8 px-3.
+    compoundVariants: [{ variant: "link", class: "h-auto px-0" }],
     defaultVariants: { variant: "secondary", size: "md" },
   },
 );
