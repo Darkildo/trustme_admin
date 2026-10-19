@@ -83,10 +83,19 @@ export interface Report extends ReportSummary {
   checks: Check[];
 }
 
+/** Agent summary shown in lists (full record is in {@link NodeRuntime}). */
+export interface NodeAgentBrief {
+  last_seen_at: number | null;
+  hostname: string;
+}
+
 export interface NodeListItem {
   id: string;
   name: string;
   addr: string;
+  /** Prepared in the panel; the agent has not sent the key yet (node_key = ""). */
+  provisioning: boolean;
+  agent: NodeAgentBrief | null;
   /** 64 hex. */
   node_key: string;
   /** "A1B2-C3D4-…" — groups of 4 hex, upper case. */
@@ -139,7 +148,7 @@ export interface OverviewTile {
   spark: number[];
 }
 
-export type OverviewEventKind = "status_changed" | "report_problem";
+export type OverviewEventKind = "status_changed" | "report_problem" | "key_changed";
 
 export interface OverviewEvent {
   at: number;
@@ -181,6 +190,12 @@ export interface UpdateNodeInput {
   notes?: string;
   probe_interval_secs?: number;
   paused?: boolean;
+  /** "" — the default profile. */
+  profile_id?: string;
+  /** Whole object; {} removes all overrides. */
+  overrides?: Record<string, number>;
+  /** Whole list. */
+  turn_server_ids?: string[];
 }
 
 export interface CreateUserResult {
@@ -196,4 +211,162 @@ export interface AuditEntry {
   target: string | null;
   details: Record<string, unknown>;
   ip: string | null;
+}
+
+// ---- Node management (stage 2) ----
+
+export type Scope = "hot" | "new_sessions" | "restart";
+export type SettingGroup = "messages" | "sessions" | "network" | "blobs" | "security" | "calls";
+export type SettingUnit = "count" | "per_second" | "bytes" | "bytes_per_day" | "seconds";
+
+/** One entry of the node limits catalog (`GET /catalog`). */
+export interface Setting {
+  key: string;
+  env: string;
+  group: SettingGroup;
+  unit: SettingUnit;
+  scope: Scope;
+  min: number;
+  max: number;
+  /** 0 means «no limit». */
+  zero_unlimited: boolean;
+  default: number;
+  /** One line, in Russian. */
+  summary: string;
+}
+
+export type Settings = Record<string, number>;
+
+export interface Profile {
+  id: string;
+  name: string;
+  /** Only the values set by the profile; the rest is the node default. */
+  settings: Settings;
+  is_default: boolean;
+  /** How many nodes use this profile. */
+  nodes: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface ProfileInput {
+  name?: string;
+  settings?: Settings;
+}
+
+export interface TurnServer {
+  id: string;
+  name: string;
+  /** stun: / stuns: / turn: / turns: */
+  urls: string[];
+  /** The secret itself is never returned. */
+  has_secret: boolean;
+  /** coturn installed together with a node. */
+  managed_by_node: { id: string; name: string } | null;
+  nodes: number;
+  created_at: number;
+}
+
+export interface TurnServerInput {
+  name?: string;
+  urls?: string[];
+  /** Omitted — keep; "" — remove. */
+  secret?: string;
+}
+
+export type Backend = "sled" | "jetstream";
+
+export interface ProvisionInfo {
+  public_host: string;
+  port: number;
+  backend: Backend;
+  with_turn: boolean;
+}
+
+export interface AgentInfo {
+  hostname: string;
+  arch: string;
+  tmnode_version: string;
+  enrolled_at: number;
+  last_seen_at: number | null;
+  online: boolean;
+}
+
+export type ApplyResult = "applied" | "invalid" | "absent";
+export type RuntimeState = "no_agent" | "pending" | "applied" | "invalid";
+
+export interface AppliedInfo {
+  result: ApplyResult;
+  version: string | null;
+  error: string | null;
+  pending_restart: string[];
+  at: number;
+}
+
+export interface RuntimeSetting {
+  key: string;
+  value: number;
+  source: "profile" | "override";
+}
+
+/** `GET /nodes/{id}/runtime` — what is desired for the node and what was applied. */
+export interface NodeRuntime {
+  profile: { id: string; name: string };
+  overrides: Settings;
+  /** Only the values that are set (profile or override). */
+  settings: RuntimeSetting[];
+  turn_server_ids: string[];
+  desired_version: string;
+  provision: ProvisionInfo | null;
+  agent: AgentInfo | null;
+  applied: AppliedInfo | null;
+  state: RuntimeState;
+}
+
+export interface ProvisionInput {
+  name: string;
+  public_host: string;
+  port?: number;
+  backend?: Backend;
+  with_turn?: boolean;
+  profile_id?: string;
+  turn_server_ids?: string[];
+  labels?: Record<string, string>;
+}
+
+export interface EnrollInfo {
+  token: string;
+  expires_at: number;
+  /** Ready-to-run command for the server (one-time, 24 h). */
+  command: string;
+}
+
+export interface ProvisionResult {
+  node_id: string;
+  enroll: EnrollInfo;
+}
+
+export interface SshInstallInput {
+  username: string;
+  password?: string;
+  private_key?: string;
+  passphrase?: string;
+  sudo_password?: string;
+  host?: string;
+  port?: number;
+  host_fingerprint?: string;
+}
+
+export type JobStatus = "running" | "succeeded" | "failed";
+
+export interface Job {
+  id: string;
+  node_id: string;
+  status: JobStatus;
+  /** Install output, up to 256 KiB. */
+  output: string;
+  exit_code: number | null;
+  error: string | null;
+  started_at: number;
+  finished_at: number | null;
 }

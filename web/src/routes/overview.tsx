@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import * as React from "react";
 import { Plus, Server } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useUi } from "@/app/ui-context";
@@ -12,7 +13,7 @@ import { Events } from "@/features/overview/Events";
 import { Hero } from "@/features/overview/Hero";
 import { LatencyChart } from "@/features/overview/LatencyChart";
 import { Tiles } from "@/features/overview/Tiles";
-import { overviewQuery } from "@/lib/queries";
+import { nodesQuery, overviewQuery } from "@/lib/queries";
 
 function OverviewSkeleton() {
   return (
@@ -33,6 +34,11 @@ function OverviewSkeleton() {
 export function OverviewPage() {
   const { t } = useTranslation();
   const q = useQuery(overviewQuery);
+  const list = useQuery(nodesQuery).data;
+  const provisioning = React.useMemo(
+    () => new Set((list ?? []).filter((n) => n.provisioning).map((n) => n.id)),
+    [list],
+  );
   const canAdd = useCan("admin");
   const { openAddNode } = useUi();
 
@@ -61,7 +67,7 @@ export function OverviewPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <Hero data={data} updatedAt={q.dataUpdatedAt} />
+      <Hero data={data} updatedAt={q.dataUpdatedAt} provisioning={provisioning.size} />
       <div className="grid gap-5 xl:grid-cols-3">
         <section aria-labelledby="tiles-title" className="flex flex-col gap-3 xl:col-span-2">
           <h2
@@ -70,7 +76,7 @@ export function OverviewPage() {
           >
             {t("overview.tiles")}
           </h2>
-          <Tiles tiles={data.tiles} />
+          <Tiles tiles={data.tiles} provisioning={provisioning} />
         </section>
         <Card className="xl:row-span-2">
           <CardHeader>

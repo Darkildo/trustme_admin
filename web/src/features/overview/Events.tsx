@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, TriangleAlert, Activity } from "lucide-react";
+import { ArrowRight, TriangleAlert, Activity, KeyRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatDateTime, formatRelative } from "@/lib/format";
@@ -23,7 +23,9 @@ export function Events({ events }: { events: OverviewEvent[] }) {
       {events.map((e, i) => (
         <li key={`${e.at}-${e.node_id}-${i}`} className="relative flex gap-3 py-2.5">
           <span className="relative z-10 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-line-strong bg-surface-1">
-            {e.kind === "report_problem" ? (
+            {e.kind === "key_changed" ? (
+              <KeyRound className="size-3.5 text-fail" aria-label={t("events.key_changed")} />
+            ) : e.kind === "report_problem" ? (
               <TriangleAlert
                 className="size-3.5 text-warn"
                 aria-label={t("events.report_problem")}

@@ -14,7 +14,8 @@ CREATE TABLE limit_profiles (
     updated_at INTEGER NOT NULL
 );
 INSERT INTO limit_profiles (id, name, settings, is_default, created_at, updated_at)
-VALUES ('default', 'По умолчанию', '{}', 1, 0, 0);
+VALUES ('default', 'По умолчанию', '{}', 1, CAST(strftime('%s', 'now') AS INTEGER),
+        CAST(strftime('%s', 'now') AS INTEGER));
 
 ALTER TABLE nodes ADD COLUMN profile_id TEXT REFERENCES limit_profiles (id) ON DELETE SET NULL;
 -- Переопределения лимитов этой ноды поверх профиля: имя → число.

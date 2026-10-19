@@ -86,7 +86,7 @@ export function CommandPalette({
               <Command.Group heading={t("palette.actions")} className={groupClass}>
                 {isAdmin && (
                   <Command.Item
-                    value="add node добавить ноду"
+                    value="new node add install ssh новая нода добавить установить"
                     onSelect={() => run(onAddNode)}
                     className={itemClass}
                   >
@@ -134,7 +134,7 @@ export function CommandPalette({
                   return (
                     <Command.Item
                       key={item.to}
-                      value={`go ${t(item.labelKey)} ${item.to}`}
+                      value={`go ${t(item.labelKey)} ${item.to} ${item.keywords ?? ""}`}
                       onSelect={() => run(() => void navigate({ to: item.to }))}
                       className={itemClass}
                     >

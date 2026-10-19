@@ -4,6 +4,10 @@ import { FullPageLoader } from "./RouteStates";
 
 // Secondary screens are split into their own chunks.
 export const NodePage = lazy(() => import("@/routes/node").then((m) => ({ default: m.NodePage })));
+export const LimitsPage = lazy(() =>
+  import("@/routes/limits").then((m) => ({ default: m.LimitsPage })),
+);
+export const TurnPage = lazy(() => import("@/routes/turn").then((m) => ({ default: m.TurnPage })));
 export const AuditPage = lazy(() =>
   import("@/routes/audit").then((m) => ({ default: m.AuditPage })),
 );

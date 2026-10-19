@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
+import { Hourglass } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Sparkline } from "@/components/Sparkline";
 import { StatusIcon } from "@/components/StatusBadge";
@@ -9,7 +10,14 @@ import { TONE_CLASSES } from "@/lib/tone";
 import type { OverviewTile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-export function Tiles({ tiles }: { tiles: OverviewTile[] }) {
+export function Tiles({
+  tiles,
+  provisioning,
+}: {
+  tiles: OverviewTile[];
+  /** Ids of nodes awaiting installation. */
+  provisioning?: ReadonlySet<string>;
+}) {
   const { t } = useTranslation();
   const sorted = [...tiles].sort(
     (a, b) => nodeStatusRank(b.status) - nodeStatusRank(a.status) || a.name.localeCompare(b.name),
@@ -17,6 +25,7 @@ export function Tiles({ tiles }: { tiles: OverviewTile[] }) {
   return (
     <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
       {sorted.map((tile, i) => {
+        const waiting = provisioning?.has(tile.id) ?? false;
         const tone = nodeStatusMeta(tile.status).tone;
         return (
           <motion.li
@@ -33,7 +42,10 @@ export function Tiles({ tiles }: { tiles: OverviewTile[] }) {
             >
               <span
                 aria-hidden
-                className={cn("absolute inset-x-0 top-0 h-0.5 opacity-80", TONE_CLASSES[tone].fill)}
+                className={cn(
+                  "absolute inset-x-0 top-0 h-0.5 opacity-80",
+                  waiting ? "bg-accent-2" : TONE_CLASSES[tone].fill,
+                )}
               />
               {tile.status === "fail" && (
                 <span
@@ -43,25 +55,42 @@ export function Tiles({ tiles }: { tiles: OverviewTile[] }) {
               )}
               <div className="flex items-start justify-between gap-3">
                 <span className="flex min-w-0 items-center gap-2">
-                  <StatusIcon status={tile.status} />
+                  {waiting ? (
+                    <Hourglass
+                      role="img"
+                      aria-label={t("status.provisioning")}
+                      className="size-4 shrink-0 text-accent-2"
+                      strokeWidth={2.25}
+                    />
+                  ) : (
+                    <StatusIcon status={tile.status} />
+                  )}
                   <span className="truncate font-medium text-fg">{tile.name}</span>
                 </span>
                 <span className="shrink-0 font-mono text-sm text-fg tabular">
                   {formatMs(tile.handshake_ms)}
                 </span>
               </div>
-              <div className="flex items-end gap-3">
-                <Sparkline
-                  values={tile.spark}
-                  label={`${t("nodes.uptime")}: ${formatPercent(tile.uptime_24h)}`}
-                />
-                <span className="shrink-0 text-right">
-                  <span className="block font-mono text-xs text-fg tabular">
-                    {formatPercent(tile.uptime_24h)}
+              {waiting ? (
+                <p className="flex h-8 items-end text-xs text-accent-2">
+                  {t("status.provisioning")}
+                </p>
+              ) : (
+                <div className="flex items-end gap-3">
+                  <Sparkline
+                    values={tile.spark}
+                    label={`${t("nodes.uptime")}: ${formatPercent(tile.uptime_24h)}`}
+                  />
+                  <span className="shrink-0 text-right">
+                    <span className="block font-mono text-xs text-fg tabular">
+                      {formatPercent(tile.uptime_24h)}
+                    </span>
+                    <span className="block text-[11px] text-fg-subtle">
+                      {t("overview.uptime24")}
+                    </span>
                   </span>
-                  <span className="block text-[11px] text-fg-subtle">{t("overview.uptime24")}</span>
-                </span>
-              </div>
+                </div>
+              )}
             </Link>
           </motion.li>
         );

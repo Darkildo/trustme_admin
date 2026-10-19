@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Skeleton } from "@/components/ui/skeleton";
+import { InstallDialog, type InstallTarget } from "@/features/install/InstallDialog";
 import { AddNodeWizard } from "@/features/nodes/AddNodeWizard";
 import { storage } from "@/lib/utils";
 import { CommandPalette } from "./CommandPalette";
@@ -27,6 +28,7 @@ export function AppShell() {
   const [collapsed, setCollapsed] = React.useState(() => storage.get(COLLAPSE_KEY) === "1");
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [addOpen, setAddOpen] = React.useState(false);
+  const [install, setInstall] = React.useState<InstallTarget | null>(null);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   React.useEffect(() => {
@@ -41,7 +43,11 @@ export function AppShell() {
   }, []);
 
   const ui = React.useMemo<UiState>(
-    () => ({ openPalette: () => setPaletteOpen(true), openAddNode: () => setAddOpen(true) }),
+    () => ({
+      openPalette: () => setPaletteOpen(true),
+      openAddNode: () => setAddOpen(true),
+      openInstall: (node: InstallTarget) => setInstall(node),
+    }),
     [],
   );
 
@@ -91,6 +97,7 @@ export function AppShell() {
         onAddNode={() => setAddOpen(true)}
       />
       <AddNodeWizard open={addOpen} onOpenChange={setAddOpen} />
+      <InstallDialog target={install} onOpenChange={(o) => !o && setInstall(null)} />
     </UiContext.Provider>
   );
 }

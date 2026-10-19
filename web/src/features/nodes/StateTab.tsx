@@ -1,5 +1,7 @@
-import { Clock, FileText, Plug } from "lucide-react";
+import { Clock, FileText, Hourglass, Plug, Terminal } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useUi } from "@/app/ui-context";
+import { useCan } from "@/app/useCurrentUser";
 import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { formatDateTime, formatRelative } from "@/lib/format";
@@ -13,6 +15,29 @@ export function StateTab({ node, onConnect }: { node: NodeDetail; onConnect: () 
   const { t, i18n } = useTranslation();
   const now = useNow(30_000) / 1000;
   const report = node.latest_report;
+  const { openInstall } = useUi();
+  const canAdmin = useCan("admin");
+
+  if (node.provisioning) {
+    return (
+      <EmptyState
+        icon={Hourglass}
+        title={t("install.awaiting")}
+        text={t("install.awaitingText")}
+        action={
+          canAdmin && (
+            <Button
+              variant="primary"
+              onClick={() => openInstall({ id: node.id, name: node.name, addr: node.addr })}
+            >
+              <Terminal />
+              {t("node.install")}
+            </Button>
+          )
+        }
+      />
+    );
+  }
 
   if (!report) {
     return (
