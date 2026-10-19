@@ -15,10 +15,19 @@ use crate::desired::{Settings, check_settings, parse_settings};
 use crate::error::{ApiError, ApiResult};
 use crate::{AppState, new_id, now};
 
-/// Каталог настроек ноды: группы, единицы, пределы, умолчания и когда
-/// изменение вступает в силу.
+/// Каталог настроек ноды: группы, единицы, пределы, умолчания, когда
+/// изменение вступает в силу и с какой версии нода знает настройку.
 pub async fn catalog(_user: CurrentUser) -> Json<Value> {
-    Json(json!({ "settings": catalog::describe() }))
+    let settings: Vec<Value> = catalog::describe()
+        .into_iter()
+        .map(|s| {
+            let since = crate::desired::since(s.key).map(|v| v.to_string());
+            let mut item = serde_json::to_value(s).expect("catalog serializes");
+            item["since"] = json!(since);
+            item
+        })
+        .collect();
+    Json(json!({ "settings": settings }))
 }
 
 fn validated(settings: &Settings) -> ApiResult<()> {

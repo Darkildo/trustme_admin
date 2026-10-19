@@ -45,6 +45,19 @@ const CATALOG: Setting[] = [
     default: MIB,
     summary: "Потолок куска загрузки",
   },
+  {
+    key: "queue_addressing_enabled",
+    env: "QUEUE_ADDRESSING_ENABLED",
+    group: "messages",
+    unit: "flag",
+    scope: "restart",
+    min: 0,
+    max: 1,
+    zero_unlimited: false,
+    default: 1,
+    summary: "Адресация по очередям",
+    since: "0.8.0",
+  },
 ];
 
 function Harness({ initial, spy }: { initial: Settings; spy: (v: Settings) => void }) {
@@ -70,7 +83,7 @@ describe("LimitsEditor", () => {
     expect(screen.getByRole("heading", { name: "Отправка и очереди" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Звонки" })).toBeInTheDocument();
     expect(screen.getByText("64 MiB")).toBeInTheDocument();
-    expect(screen.getByText("после перезапуска")).toBeInTheDocument();
+    expect(screen.getAllByText("после перезапуска")).toHaveLength(2);
   });
 
   it("sets a value in another unit and validates it against min/max", async () => {
@@ -105,6 +118,27 @@ describe("LimitsEditor", () => {
     expect(screen.getByText("∞")).toBeInTheDocument();
     await user.click(toggle);
     expect(spy).toHaveBeenLastCalledWith({ quota_max_bytes_per_queue: 128 * MIB });
+  });
+
+  it("edits a flag with a switch and marks the node version it needs", async () => {
+    const user = userEvent.setup();
+    const spy = vi.fn();
+    render(<Harness initial={{}} spy={spy} />);
+    expect(screen.getByText("включено")).toBeInTheDocument();
+    expect(screen.getByText("нода ≥ 0.8.0")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Задать queue_addressing_enabled" }));
+    expect(spy).toHaveBeenLastCalledWith({ queue_addressing_enabled: 1 });
+    const toggle = screen.getByRole("switch", { name: "Адресация по очередям" });
+    expect(toggle).toBeChecked();
+    expect(
+      screen.queryByRole("textbox", { name: "Адресация по очередям" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(spy).toHaveBeenLastCalledWith({ queue_addressing_enabled: 0 });
+    expect(toggle).not.toBeChecked();
+    expect(screen.getByText("выключено")).toBeInTheDocument();
   });
 
   it("resets a value to the default and filters by search", async () => {

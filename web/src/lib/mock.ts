@@ -447,6 +447,7 @@ const CATALOG_ROWS: Row[] = [
   ["quota_max_messages_sender_pair", "messages", "count", "hot", 1, COUNT_MAX, true, 2000, "Сколько сообщений один отправитель держит в очередях одного получателя"],
   ["rate_limit_send_msgs_per_sec", "messages", "per_second", "hot", 1, RATE_MAX, true, 100, "Отправка: сообщений в секунду на пользователя"],
   ["rate_limit_send_bytes_per_day", "messages", "bytes_per_day", "hot", MIB, 100 * TIB, true, 256 * MIB, "Отправка: байт в сутки на пользователя"],
+  ["queue_addressing_enabled", "messages", "flag", "restart", 0, 1, false, 1, "Адресация по очередям: получателя определяет queueId"],
   ["limit_max_sessions_per_user", "sessions", "count", "hot", 1, 100_000, true, 64, "Одновременных сессий одного пользователя"],
   ["session_confirm_timeout_secs", "sessions", "seconds", "new_sessions", 1, 600, false, 30, "Сколько нода ждёт первый кадр клиента после входа"],
   ["limit_ping_per_sec", "sessions", "per_second", "new_sessions", 1, RATE_MAX, true, 50, "Ping в секунду на соединение"],
@@ -480,6 +481,9 @@ const CATALOG_ROWS: Row[] = [
   ["ice_credential_ttl_secs", "calls", "seconds", "hot", 300, DAY, false, 7200, "Срок временной учётки TURN; звонок длиннее продлевается ICE restart"],
 ];
 
+/** Like the server's `desired::SINCE`: older nodes do not get these keys. */
+const SINCE: Record<string, string> = { queue_addressing_enabled: "0.8.0" };
+
 const CATALOG: Setting[] = CATALOG_ROWS.map(
   ([key, group, unit, scope, min, max, zero, def, summary]) => ({
     key,
@@ -492,6 +496,7 @@ const CATALOG: Setting[] = CATALOG_ROWS.map(
     zero_unlimited: zero,
     default: def,
     summary,
+    since: SINCE[key] ?? null,
   }),
 );
 const CATALOG_BY_KEY = new Map(CATALOG.map((c) => [c.key, c]));
@@ -1049,6 +1054,7 @@ function runtimeView(node: MockNode): NodeRuntime {
       })),
     turn_server_ids: [...node.turnIds].sort(),
     desired_version: versionOf(node, node.desiredRev),
+    unsupported: unsupportedOf(node, merged),
     provision: node.provision,
     agent,
     applied,
@@ -1067,6 +1073,15 @@ function cmpVersion(a: string, b: string): number {
   const pb = b.split(".").map(Number);
   for (let i = 0; i < 3; i++) if (pa[i] !== pb[i]) return (pa[i] ?? 0) - (pb[i] ?? 0);
   return 0;
+}
+
+/** Keys the node's version does not know yet; an unknown version gets everything. */
+function unsupportedOf(node: MockNode, merged: Settings): string[] {
+  const version = nodeVersionOf(node);
+  if (!version) return [];
+  return Object.keys(merged)
+    .filter((k) => SINCE[k] && cmpVersion(version, SINCE[k]) < 0)
+    .sort();
 }
 
 function nodeVersionOf(node: MockNode): string | null {

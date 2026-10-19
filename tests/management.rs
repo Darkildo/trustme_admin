@@ -643,3 +643,97 @@ async fn blob_reserve_is_fitted_to_small_disks() {
     let (status, _) = h.call("GET", "/nodes/missing/blob-reserve", None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn queue_addressing_is_a_flag_older_nodes_do_not_get() {
+    let h = Harness::new().await;
+    let (_, body) = h.call("GET", "/catalog", None).await;
+    let flag = body["settings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["key"] == "queue_addressing_enabled")
+        .cloned()
+        .expect("флаг в каталоге");
+    assert_eq!(flag["unit"], "flag");
+    assert_eq!(flag["scope"], "restart");
+    assert_eq!(flag["default"], 1, "включена по умолчанию");
+    assert_eq!(flag["since"], "0.8.0");
+    assert_eq!(body["settings"][0]["since"], Value::Null);
+
+    let (_, body) = h
+        .call(
+            "POST",
+            "/nodes/provision",
+            Some(json!({ "name": "Очереди", "public_host": "203.0.113.30" })),
+        )
+        .await;
+    let node = body["node_id"].as_str().unwrap().to_owned();
+    let token = body["enroll"]["token"].as_str().unwrap();
+    let (_, reply, _) = h
+        .send(
+            "POST",
+            "/agent/enroll",
+            Some(json!({ "token": token, "hostname": "vps", "arch": "x86_64", "tmnode_version": "0.7.0" })),
+            Some("x"),
+        )
+        .await;
+    let agent = reply["agent_token"].as_str().unwrap().to_owned();
+
+    let (status, body) = h
+        .call(
+            "PATCH",
+            &format!("/nodes/{node}"),
+            Some(json!({ "overrides": { "queue_addressing_enabled": 0, "limit_max_connections": 10 } })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, _) = h
+        .call(
+            "PATCH",
+            &format!("/nodes/{node}"),
+            Some(json!({ "overrides": { "queue_addressing_enabled": 2 } })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // Нода 0.7.0 флага не знает и отвергла бы весь файл — ей он не отдаётся.
+    // Образ без версии или агент, не приславший образ, получают всё.
+    for (image, unsupported, in_file) in [
+        (
+            Some("ghcr.io/darkildo/trustme_backend:v0.7.0"),
+            json!(["queue_addressing_enabled"]),
+            false,
+        ),
+        (
+            Some("ghcr.io/darkildo/trustme_backend:v0.8.0"),
+            json!([]),
+            true,
+        ),
+        (
+            Some("ghcr.io/darkildo/trustme_backend:stable"),
+            json!([]),
+            true,
+        ),
+        (None, json!([]), true),
+    ] {
+        let beat = json!({ "tmnode_version": "0.7.0", "node_image": image });
+        let (status, reply, _) = h
+            .send("POST", "/agent/heartbeat", Some(beat), Some(&agent))
+            .await;
+        assert_eq!(status, StatusCode::OK, "{reply}");
+        let doc = reply["runtime"]["content"].as_str().unwrap();
+        assert_eq!(
+            doc.contains("queue_addressing_enabled = 0"),
+            in_file,
+            "{image:?}: {doc}"
+        );
+        assert!(doc.contains("limit_max_connections = 10"), "{image:?}");
+        let (_, view) = h.call("GET", &format!("/nodes/{node}/runtime"), None).await;
+        assert_eq!(view["unsupported"], unsupported, "{image:?}");
+        assert_eq!(
+            view["desired_version"], reply["runtime"]["version"],
+            "{image:?}"
+        );
+    }
+}

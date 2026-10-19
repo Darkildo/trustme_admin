@@ -540,6 +540,11 @@ const en: Dictionary = {
       count: "pcs",
     },
     unlimited: "unlimited",
+    on: "on",
+    off: "off",
+    since: "node ≥ {{version}}",
+    sinceHint:
+      "Nodes older than {{version}} do not know this setting: the panel will not send it to them, they keep their default",
     unitFor: "Unit for {{key}}",
     set: "Set",
     setFor: "Set {{key}}",
@@ -716,6 +721,9 @@ const en: Dictionary = {
     },
     pendingRestart: "Waiting for a node restart",
     pendingRestartHint: "These settings take effect after the node restarts",
+    unsupported: "Not sent: the node does not know them",
+    unsupportedHint:
+      "These settings are set, but the node version is too old, so they were left out of runtime.toml. Update the node and the panel will send them",
     newNode: "New node",
     agent: {
       title: "tmnode agent",

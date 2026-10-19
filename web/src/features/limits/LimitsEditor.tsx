@@ -1,4 +1,4 @@
-import { CircleAlert, Pencil, RotateCcw, Search, SearchX } from "lucide-react";
+import { CircleAlert, History, Pencil, RotateCcw, Search, SearchX } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -215,6 +215,7 @@ function SettingRow({
       ? t("limits.inProfile", { name: profileName ?? "", value: fmt(inherited.value) })
       : t("limits.nodeDefault", { value: fmt(inherited.value) });
   const unlimited = isSet && value === 0 && setting.zero_unlimited;
+  const flag = setting.unit === "flag";
 
   return (
     <li
@@ -233,6 +234,17 @@ function SettingRow({
             {setting.key}
           </code>
           <ScopeBadge scope={setting.scope} />
+          {setting.since && (
+            <Tooltip content={t("limits.sinceHint", { version: setting.since })}>
+              <span
+                tabIndex={0}
+                className="inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-line px-1.5 font-mono text-[11px] whitespace-nowrap text-fg-subtle"
+              >
+                <History className="size-3" aria-hidden strokeWidth={2.25} />
+                {t("limits.since", { version: setting.since })}
+              </span>
+            </Tooltip>
+          )}
           {isSet ? (
             <span
               className={cn(
@@ -294,6 +306,18 @@ function SettingRow({
                   </span>
                   {t("limits.unlimited")}
                 </span>
+              ) : flag ? (
+                <div className="flex h-8 min-w-0 flex-1 items-center gap-2.5">
+                  <Switch
+                    id={id}
+                    checked={value === 1}
+                    disabled={!onSet}
+                    onCheckedChange={(on) => onSet?.(on ? 1 : 0)}
+                    aria-invalid={Boolean(error)}
+                    aria-describedby={error ? errorId : hintId}
+                  />
+                  <span className="text-[13px] text-fg">{fmt(value)}</span>
+                </div>
               ) : (
                 <div className="min-w-0 flex-1">
                   <AmountInput

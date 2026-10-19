@@ -16,12 +16,35 @@ use trust_message_tcp::runtime::RuntimeFile;
 use trust_message_tcp::runtime::catalog;
 
 use crate::crypto::SecretBox;
+use crate::releases::{Version, image_version};
 
 /// Потолок кадра ноды по умолчанию: им проверяются связанные настройки
 /// (кусок файла должен влезать в кадр).
 const MAX_FRAME_LEN: usize = 8 * 1024 * 1024;
 
 pub type Settings = BTreeMap<String, u64>;
+
+/// С какой версии нода знает настройку. Незнакомое имя в `runtime.toml`
+/// нода не пропускает и отвергает весь файл, поэтому ноде старше такие
+/// настройки не отдаются: она остаётся на своём умолчании.
+const SINCE: &[(&str, Version)] = &[("queue_addressing_enabled", Version::new(0, 8, 0))];
+
+/// Версия ноды, с которой она понимает настройку; `None` — понимает любая.
+pub fn since(key: &str) -> Option<Version> {
+    SINCE.iter().find(|(k, _)| *k == key).map(|(_, v)| *v)
+}
+
+/// Настройки, которые нода понимает, и ключи, для неё слишком новые. Версия
+/// ноды неизвестна (тег без версии, агент не прислал образ) — отдаётся всё.
+pub fn for_node(settings: Settings, node: Option<Version>) -> (Settings, Vec<String>) {
+    let Some(node) = node else {
+        return (settings, Vec::new());
+    };
+    let (kept, newer): (Settings, Settings) = settings
+        .into_iter()
+        .partition(|(key, _)| since(key).is_none_or(|v| node >= v));
+    (kept, newer.into_keys().collect())
+}
 
 /// Проверить настройки по каталогу ноды и вместе — тем же разбором, что
 /// сделает нода. Ошибка — текст для администратора.
@@ -161,11 +184,38 @@ pub async fn ice_servers(
         .collect()
 }
 
-/// Желаемый `runtime.toml` ноды.
-pub async fn desired(db: &SqlitePool, secrets: &SecretBox, node_id: &str) -> Result<RuntimeDoc> {
+/// Образ ноды из последнего heartbeat агента.
+pub async fn node_image(db: &SqlitePool, node_id: &str) -> Result<Option<String>> {
+    let image: Option<Option<String>> =
+        sqlx::query_scalar("SELECT node_image FROM agents WHERE node_id = ?")
+            .bind(node_id)
+            .fetch_optional(db)
+            .await?;
+    Ok(image.flatten())
+}
+
+pub struct Desired {
+    pub doc: RuntimeDoc,
+    /// Настройки профиля и переопределений, которых эта нода ещё не знает:
+    /// в файл они не попали.
+    pub skipped: Vec<String>,
+}
+
+/// Желаемый `runtime.toml` ноды. `image` — образ, на котором нода работает
+/// или будет установлена: по его версии отсеиваются слишком новые настройки.
+pub async fn desired(
+    db: &SqlitePool,
+    secrets: &SecretBox,
+    node_id: &str,
+    image: Option<&str>,
+) -> Result<Desired> {
     let settings = effective(db, node_id).await?.merged();
+    let (settings, skipped) = for_node(settings, image.and_then(image_version));
     let ice = ice_servers(db, secrets, node_id).await?;
-    Ok(render(&settings, &ice))
+    Ok(Desired {
+        doc: render(&settings, &ice),
+        skipped,
+    })
 }
 
 #[cfg(test)]
@@ -220,5 +270,34 @@ mod tests {
         s.insert("limit_max_connections".into(), 0);
         assert!(check_settings(&s).is_ok());
         assert!(parse_settings("garbage").is_empty());
+        let mut s = Settings::new();
+        s.insert("queue_addressing_enabled".into(), 0);
+        assert!(check_settings(&s).is_ok());
+        s.insert("queue_addressing_enabled".into(), 2);
+        assert!(check_settings(&s).is_err());
+    }
+
+    #[test]
+    fn newer_settings_are_kept_from_older_nodes() {
+        let mut s = Settings::new();
+        s.insert("queue_addressing_enabled".into(), 0);
+        s.insert("limit_max_connections".into(), 10);
+
+        let (kept, skipped) = for_node(s.clone(), Some(Version::new(0, 7, 0)));
+        assert_eq!(kept.keys().collect::<Vec<_>>(), ["limit_max_connections"]);
+        assert_eq!(skipped, ["queue_addressing_enabled"]);
+        // Файл без новой настройки старая нода примет.
+        let file = RuntimeFile::parse(&render(&kept, &[]).content).unwrap();
+        assert!(!file.settings.contains_key("queue_addressing_enabled"));
+
+        for node in [
+            Some(Version::new(0, 8, 0)),
+            Some(Version::new(1, 0, 0)),
+            None,
+        ] {
+            let (kept, skipped) = for_node(s.clone(), node);
+            assert_eq!(kept, s, "{node:?}");
+            assert!(skipped.is_empty());
+        }
     }
 }

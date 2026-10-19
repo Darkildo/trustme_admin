@@ -24,6 +24,8 @@ const SECOND_FACTORS: UnitFactor[] = [
 ];
 const PER_SECOND: UnitFactor[] = [{ id: "ps", factor: 1, labelKey: "limits.units.perSecond" }];
 const COUNT: UnitFactor[] = [{ id: "n", factor: 1, labelKey: "limits.units.count" }];
+/** A switch: 0 — off, 1 — on. Edited with a toggle, never typed. */
+const FLAG: UnitFactor[] = [{ id: "flag", factor: 1, labelKey: "limits.units.count" }];
 
 /** Multipliers offered by the input for a unit, smallest first. */
 export function unitFactors(unit: SettingUnit): UnitFactor[] {
@@ -37,6 +39,8 @@ export function unitFactors(unit: SettingUnit): UnitFactor[] {
       return PER_SECOND;
     case "count":
       return COUNT;
+    case "flag":
+      return FLAG;
   }
 }
 
@@ -108,6 +112,7 @@ export function formatSettingValue(
   t: T,
   lang: string,
 ): string {
+  if (setting.unit === "flag") return value ? t("limits.on") : t("limits.off");
   if (value === 0 && setting.zero_unlimited) return t("limits.unlimited");
   const f = bestFactor(value, setting.unit);
   const amount = grouped(toAmount(value, f), lang);
