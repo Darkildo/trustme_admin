@@ -4376,8 +4376,8 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "tmnode"
-version = "0.2.0"
-source = "git+https://github.com/Darkildo/trustme_backend?tag=v0.6.0#f4afe4612d6705b5d2b4f21cdfa0b9c38e89bd02"
+version = "0.7.0"
+source = "git+https://github.com/Darkildo/trustme_backend?tag=v0.7.0#0cc25f8a185e8deb0a10a78b2c6c19b787d48515"
 dependencies = [
  "anyhow",
  "fs2",
@@ -4386,6 +4386,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "sha2 0.11.1",
  "tokio",
  "toml",
  "trust_message_tcp",
@@ -4731,8 +4732,8 @@ dependencies = [
 
 [[package]]
 name = "trust_message_tcp"
-version = "0.6.0"
-source = "git+https://github.com/Darkildo/trustme_backend?tag=v0.6.0#f4afe4612d6705b5d2b4f21cdfa0b9c38e89bd02"
+version = "0.7.0"
+source = "git+https://github.com/Darkildo/trustme_backend?tag=v0.7.0#0cc25f8a185e8deb0a10a78b2c6c19b787d48515"
 dependencies = [
  "anyhow",
  "async-nats",
