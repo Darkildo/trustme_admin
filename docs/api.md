@@ -429,7 +429,7 @@ coturn ноды отдельно не удаляется → `409`.
 ```ts
 { username: string;
   password?: string;          // или private_key
-  private_key?: string;       // OpenSSH PEM
+  private_key?: string;       // OpenSSH PEM, Ed25519 или ECDSA (RSA не поддерживается)
   passphrase?: string;
   sudo_password?: string;     // если пользователь не root; по умолчанию — пароль входа
   host?: string;              // по умолчанию public_host ноды
