@@ -4787,6 +4787,7 @@ dependencies = [
  "hex",
  "mime_guess",
  "rand 0.10.3",
+ "reqwest",
  "russh",
  "rust-embed",
  "serde",

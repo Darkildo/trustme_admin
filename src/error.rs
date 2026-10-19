@@ -58,6 +58,11 @@ impl ApiError {
         Self::new(StatusCode::UNPROCESSABLE_ENTITY, "unprocessable", message)
     }
 
+    /// Внешний источник (GitHub) не ответил.
+    pub fn unavailable(message: impl Into<String>) -> Self {
+        Self::new(StatusCode::SERVICE_UNAVAILABLE, "unavailable", message)
+    }
+
     pub fn rate_limited(retry_after: u64) -> Self {
         Self {
             retry_after: Some(retry_after.max(1)),

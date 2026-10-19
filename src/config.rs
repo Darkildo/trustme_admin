@@ -24,6 +24,11 @@ pub struct Config {
     /// Образ ноды для новых установок (`TM_ADMIN_NODE_IMAGE`).
     /// Default: `ghcr.io/darkildo/trustme_backend:stable`.
     pub node_image: String,
+    /// Репозиторий релизов бэкенда `владелец/имя` на GitHub — до них панель
+    /// обновляет ноды (`TM_ADMIN_RELEASES_REPO`). `off` — не ходить в GitHub
+    /// (офлайн-панель): версию и хэш `tmnode` задают вручную.
+    /// Default: `Darkildo/trustme_backend`.
+    pub releases_repo: Option<String>,
 }
 
 pub const DEFAULT_NODE_IMAGE: &str = "ghcr.io/darkildo/trustme_backend:stable";
@@ -34,7 +39,8 @@ trustme-admin — панель управления нодами TrustMe
 Использование: trustme-admin [--listen АДРЕС:ПОРТ] [--data КАТАЛОГ] [--public-url URL] [--trust-proxy]
 
 Переменные окружения: TM_ADMIN_LISTEN, TM_ADMIN_DATA, TM_ADMIN_PUBLIC_URL,
-TM_ADMIN_TRUST_PROXY, TM_ADMIN_PROBE_RETENTION_DAYS, TM_ADMIN_NODE_IMAGE, RUST_LOG.
+TM_ADMIN_TRUST_PROXY, TM_ADMIN_PROBE_RETENTION_DAYS, TM_ADMIN_NODE_IMAGE,
+TM_ADMIN_RELEASES_REPO (владелец/имя или off), RUST_LOG.
 ";
 
 pub enum Parsed {
@@ -61,6 +67,7 @@ impl Config {
             .transpose()?
             .unwrap_or(14);
         let node_image = env("TM_ADMIN_NODE_IMAGE").unwrap_or_else(|| DEFAULT_NODE_IMAGE.into());
+        let releases_repo = parse_repo(env("TM_ADMIN_RELEASES_REPO").as_deref())?;
 
         let mut args = args.into_iter();
         while let Some(arg) = args.next() {
@@ -96,6 +103,7 @@ impl Config {
             trust_proxy,
             probe_retention_days,
             node_image,
+            releases_repo,
         }))
     }
 
@@ -105,6 +113,29 @@ impl Config {
 
     pub fn secure_cookies(&self) -> bool {
         self.public_url.starts_with("https://")
+    }
+}
+
+/// `владелец/имя` репозитория GitHub; `off` / `false` / пусто — выключено.
+fn parse_repo(value: Option<&str>) -> Result<Option<String>> {
+    let Some(value) = value.map(str::trim) else {
+        return Ok(Some(crate::releases::DEFAULT_REPO.into()));
+    };
+    if matches!(
+        value.to_ascii_lowercase().as_str(),
+        "" | "off" | "false" | "0" | "no"
+    ) {
+        return Ok(None);
+    }
+    let part_ok = |p: &str| {
+        !p.is_empty()
+            && p.len() <= 100
+            && p.chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+    };
+    match value.split_once('/') {
+        Some((owner, name)) if part_ok(owner) && part_ok(name) => Ok(Some(value.to_owned())),
+        _ => bail!("TM_ADMIN_RELEASES_REPO: ожидается владелец/имя (или off)"),
     }
 }
 
@@ -146,6 +177,17 @@ mod tests {
         assert!(!c.trust_proxy && !c.secure_cookies());
         assert_eq!(c.probe_retention_days, 14);
         assert_eq!(c.node_image, DEFAULT_NODE_IMAGE);
+        assert_eq!(c.releases_repo.as_deref(), Some("Darkildo/trustme_backend"));
+        assert_eq!(
+            run(&[], &[("TM_ADMIN_RELEASES_REPO", "off")]).releases_repo,
+            None
+        );
+        assert_eq!(
+            run(&[], &[("TM_ADMIN_RELEASES_REPO", "me/fork")])
+                .releases_repo
+                .as_deref(),
+            Some("me/fork")
+        );
         assert_eq!(
             run(&[], &[("TM_ADMIN_NODE_IMAGE", "img:1")]).node_image,
             "img:1"
@@ -184,6 +226,8 @@ mod tests {
         assert!(parse(&[], &[("TM_ADMIN_PUBLIC_URL", "ftp://x")]).is_err());
         assert!(parse(&[], &[("TM_ADMIN_TRUST_PROXY", "maybe")]).is_err());
         assert!(parse(&[], &[("TM_ADMIN_PROBE_RETENTION_DAYS", "0")]).is_err());
+        assert!(parse(&[], &[("TM_ADMIN_RELEASES_REPO", "nope")]).is_err());
+        assert!(parse(&[], &[("TM_ADMIN_RELEASES_REPO", "a/b/../c")]).is_err());
         assert!(matches!(parse(&["--help"], &[]).unwrap(), Parsed::Help));
         assert!(matches!(parse(&["-V"], &[]).unwrap(), Parsed::Version));
         assert!(Config::usage().contains("TM_ADMIN_LISTEN"));
