@@ -14,6 +14,7 @@ import { NodeHeader } from "@/features/nodes/NodeHeader";
 import { SettingsTab } from "@/features/nodes/SettingsTab";
 import { StateTab } from "@/features/nodes/StateTab";
 import type { NodeTab } from "@/features/nodes/tabs";
+import { UpdateBanner } from "@/features/updates/UpdateBanner";
 import { isApiError } from "@/lib/api";
 import { nodeQuery } from "@/lib/queries";
 
@@ -64,6 +65,7 @@ export function NodePage({
   return (
     <div className="flex flex-col gap-5">
       <NodeHeader node={node} />
+      <UpdateBanner nodeId={node.id} enabled={!node.provisioning} />
       <Tabs value={tab} onValueChange={(v) => onTab(v as NodeTab)}>
         <TabsList>
           <TabsTrigger value="state">

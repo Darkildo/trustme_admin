@@ -50,11 +50,24 @@ describe("подбор резерва диска", () => {
   });
 
   it("если панель уже уменьшила резерв — пометка вместо кнопки", () => {
-    const lowered = { kind: "lowered", panel: 1280 * MIB, reserve: 5 * GIB };
+    const lowered = { kind: "lowered", panel: 1280 * MIB, reserve: 5 * GIB, legacy: true };
     expect(blobReserveAction("warn", reserve({ panel_bytes: 1280 * MIB }), true)).toEqual(lowered);
     expect(
       blobReserveAction("warn", reserve({ panel_bytes: 1280 * MIB, suggested_bytes: null }), false),
     ).toEqual(lowered);
+  });
+
+  it("старый tmnode (нет reserve_source) — предупреждение может остаться, новый — нет", () => {
+    const r = reserve({ panel_bytes: 1280 * MIB });
+    expect(blobReserveAction("warn", r, true, { available_bytes: 1 })).toMatchObject({
+      kind: "lowered",
+      legacy: true,
+    });
+    for (const source of ["runtime", "env"])
+      expect(blobReserveAction("warn", r, true, { reserve_source: source })).toMatchObject({
+        kind: "lowered",
+        legacy: false,
+      });
   });
 
   it("резерв панели не меньше резерва отчёта — снова можно подобрать", () => {

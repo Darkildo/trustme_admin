@@ -5,6 +5,10 @@ import type {
   EnrollInfo,
   Job,
   NodeRuntime,
+  NodeUpdate,
+  NodeUpdatesView,
+  ReleasesView,
+  StartUpdateInput,
   Profile,
   ProfileInput,
   ProvisionInput,
@@ -209,11 +213,23 @@ export const api = {
       request<{ enroll: EnrollInfo }>("POST", `/nodes/${enc(id)}/enroll-token`).then(
         (r) => r.enroll,
       ),
+    updates: (id: string) => request<NodeUpdatesView>("GET", `/nodes/${enc(id)}/updates`),
+    /** Завести задание на обновление (admin+); 409 — нет агента, агент старый или уже идёт. */
+    startUpdate: (id: string, input: StartUpdateInput) =>
+      request<{ update: NodeUpdate }>("POST", `/nodes/${enc(id)}/update`, input).then(
+        (r) => r.update,
+      ),
+    cancelUpdate: (id: string, uid: string) =>
+      request<{ update: NodeUpdate }>("POST", `/nodes/${enc(id)}/updates/${enc(uid)}/cancel`).then(
+        (r) => r.update,
+      ),
     sshInstall: (id: string, input: SshInstallInput) =>
       request<{ job_id: string }>("POST", `/nodes/${enc(id)}/ssh-install`, input).then(
         (r) => r.job_id,
       ),
   },
+
+  releases: () => request<ReleasesView>("GET", "/releases"),
 
   jobs: {
     get: (id: string) => request<{ job: Job }>("GET", `/jobs/${enc(id)}`).then((r) => r.job),

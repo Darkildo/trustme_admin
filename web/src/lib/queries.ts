@@ -1,7 +1,7 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import { api, fetchProbesWindow, isApiError } from "./api";
 import { nowSec } from "./format";
-import type { Job } from "./types";
+import type { Job, NodeUpdatesView } from "./types";
 
 export const REFRESH_MS = 15_000;
 
@@ -16,6 +16,8 @@ export const qk = {
   report: (id: string, rid: string) => ["nodes", id, "reports", rid] as const,
   runtime: (id: string) => ["nodes", id, "runtime"] as const,
   blobReserve: (id: string) => ["nodes", id, "blob-reserve"] as const,
+  updates: (id: string) => ["nodes", id, "updates"] as const,
+  releases: ["releases"] as const,
   catalog: ["catalog"] as const,
   profiles: ["profiles"] as const,
   turn: ["turn-servers"] as const,
@@ -165,4 +167,29 @@ export const jobQuery = (id: string) =>
     retry: (count, e) => !isApiError(e, "not_found") && count < 3,
     refetchInterval: (q) =>
       shouldPollJob(q.state.data, q.state.status === "error") ? JOB_POLL_MS : false,
+  });
+
+/** Сервер держит релизы в кэше 5 минут — чаще спрашивать незачем. */
+export const releasesQuery = queryOptions({
+  queryKey: qk.releases,
+  queryFn: () => api.releases(),
+  staleTime: 5 * 60_000,
+  retry: false,
+});
+
+/** Пока задание активно — опрос каждые 3 с, иначе раз в полминуты. */
+export const UPDATE_POLL_MS = 3_000;
+
+export function updatePollInterval(view: NodeUpdatesView | undefined): number {
+  const latest = view?.updates[0];
+  return latest && (latest.state === "pending" || latest.state === "running")
+    ? UPDATE_POLL_MS
+    : 30_000;
+}
+
+export const nodeUpdatesQuery = (id: string) =>
+  queryOptions({
+    queryKey: qk.updates(id),
+    queryFn: () => api.nodes.updates(id),
+    refetchInterval: (q) => updatePollInterval(q.state.data),
   });

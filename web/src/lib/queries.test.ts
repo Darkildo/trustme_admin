@@ -8,8 +8,10 @@ import {
   REFRESH_MS,
   runtimeQuery,
   shouldPollJob,
+  UPDATE_POLL_MS,
+  updatePollInterval,
 } from "./queries";
-import type { Job } from "./types";
+import type { Job, NodeUpdate, NodeUpdatesView } from "./types";
 
 const job = (status: Job["status"]): Job => ({
   id: "j",
@@ -54,5 +56,22 @@ describe("job polling", () => {
     const key = blobReserveQuery("n").queryKey;
     expect(key).toEqual(["nodes", "n", "blob-reserve"]);
     expect(key.slice(0, 2)).toEqual([...qk.node("n")]);
+  });
+});
+
+describe("update polling", () => {
+  const view = (state: NodeUpdate["state"] | null): NodeUpdatesView =>
+    ({
+      current: {} as NodeUpdatesView["current"],
+      updates: state ? [{ state } as NodeUpdate] : [],
+    }) as NodeUpdatesView;
+
+  it("polls fast only while the latest job is active", () => {
+    expect(updatePollInterval(view("pending"))).toBe(UPDATE_POLL_MS);
+    expect(updatePollInterval(view("running"))).toBe(UPDATE_POLL_MS);
+    for (const s of ["succeeded", "failed", "rolled_back", "refused", "cancelled", "lost"] as const)
+      expect(updatePollInterval(view(s))).toBe(30_000);
+    expect(updatePollInterval(view(null))).toBe(30_000);
+    expect(updatePollInterval(undefined)).toBe(30_000);
   });
 });
