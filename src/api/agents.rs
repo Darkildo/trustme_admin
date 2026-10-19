@@ -365,7 +365,9 @@ pub async fn enroll(
     Ok(Json(EnrollResponse {
         agent_id,
         agent_token,
-        node_id,
+        // tmnode пишет id в node.toml, а там допустимы только a-z, 0-9 и `-`.
+        // ULID нечувствителен к регистру; heartbeat узнаёт ноду по токену.
+        node_id: node_id.to_ascii_lowercase(),
         node_name: name,
         install: InstallSpec {
             image: state.node_image.clone(),

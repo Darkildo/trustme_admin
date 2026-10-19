@@ -320,6 +320,17 @@ async fn provisioned_node_enrolls_reports_and_follows_settings() {
         .send("POST", "/agent/enroll", Some(enroll(&token)), Some("x"))
         .await;
     assert_eq!(status, StatusCode::OK, "{reply}");
+    // tmnode кладёт node_id в node.toml как есть — его проверка должна пройти.
+    let node_toml = format!(
+        "schema = 1\n[node]\nname = \"Берлин\"\nid = \"{}\"\n[management]\nmode = \"managed\"\n\
+         [endpoint]\naddr = \"203.0.113.10:18081\"\nnode_key = \"1111111111111111111111111111111111111111111111111111111111111111\"\n[runtime]\nkind = \"docker\"\n\
+         container = \"message-service\"\ndata_dir = \"/var/lib/trustme/node\"\n\
+         [delivery]\nbackend = \"jetstream\"\n",
+        reply["node_id"].as_str().unwrap()
+    );
+    tmnode::node_config::NodeConfig::parse(&node_toml)
+        .expect("node.toml от enroll проходит проверку tmnode");
+    assert_eq!(reply["node_id"], node.to_ascii_lowercase());
     assert_eq!(
         reply["install"]["image"],
         "ghcr.io/darkildo/trustme_backend:v0.6.0"
