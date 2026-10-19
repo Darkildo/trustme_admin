@@ -71,6 +71,10 @@ describe("limits units", () => {
     expect(formatSettingValue(0, bytes, t, "ru")).toBe("без ограничения");
     expect(formatSettingValue(0, bytes, tEn, "en")).toBe("unlimited");
     expect(formatSettingValue(0, { unit: "count", zero_unlimited: false }, t, "ru")).toBe("0");
+    const flag = { unit: "flag", zero_unlimited: false } as const;
+    expect(formatSettingValue(1, flag, t, "ru")).toBe("включено");
+    expect(formatSettingValue(0, flag, t, "ru")).toBe("выключено");
+    expect(formatSettingValue(0, flag, tEn, "en")).toBe("off");
     expect(formatSettingValue(7200, { unit: "seconds", zero_unlimited: false }, t, "ru")).toBe(
       "2 ч",
     );

@@ -27,9 +27,9 @@ totp-rs = { version = "6.0.0", features = ["otpauth", "gen_secret"] }
 tower-http = { version = "0.7.1", features = ["set-header", "limit", "trace"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
-trust_message_tcp = { git = "https://github.com/Darkildo/trustme_backend", tag = "v0.7.0" }
+trust_message_tcp = { git = "https://github.com/Darkildo/trustme_backend", branch = "feat/queue-addressing-default" }
 # Протокол агента и каталог лимитов — из тех же исходников, что нода и tmnode.
-tmnode = { git = "https://github.com/Darkildo/trustme_backend", tag = "v0.7.0" }
+tmnode = { git = "https://github.com/Darkildo/trustme_backend", branch = "feat/queue-addressing-default" }
 ulid = "3.0.0"
 zeroize = "1.9.1"
 # SSH-установка из панели. Без фичи rsa: крейт rsa уязвим к атаке Marvin

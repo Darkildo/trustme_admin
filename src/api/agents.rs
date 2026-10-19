@@ -355,7 +355,8 @@ pub async fn enroll(
     } else {
         None
     };
-    let runtime = desired::desired(&state.db, &state.secrets, &node_id).await?;
+    let image = install_image(&state).await;
+    let runtime = desired::desired(&state.db, &state.secrets, &node_id, Some(&image)).await?;
     audit::record(
         &state.db,
         Actor::Named {
@@ -376,13 +377,13 @@ pub async fn enroll(
         node_id: node_id.to_ascii_lowercase(),
         node_name: name,
         install: InstallSpec {
-            image: install_image(&state).await,
+            image,
             public_host: provision.public_host,
             port: provision.port,
             backend: provision.backend,
             coturn,
         },
-        runtime: Some(runtime),
+        runtime: Some(runtime.doc),
     }))
 }
 
@@ -460,7 +461,16 @@ pub async fn heartbeat(
     }
     Ok(Json(HeartbeatResponse {
         interval_secs: DEFAULT_INTERVAL_SECS,
-        runtime: Some(desired::desired(&state.db, &state.secrets, &node_id).await?),
+        runtime: Some(
+            desired::desired(
+                &state.db,
+                &state.secrets,
+                &node_id,
+                beat.node_image.as_deref(),
+            )
+            .await?
+            .doc,
+        ),
         update: super::updates::order_for(&state.db, &node_id).await?,
     }))
 }
@@ -545,7 +555,9 @@ pub async fn runtime_view(
             .await?;
     let provision = provision.ok_or_else(ApiError::not_found)?;
     let effective = desired::effective(&state.db, &id).await?;
-    let doc = desired::desired(&state.db, &state.secrets, &id).await?;
+    let image = desired::node_image(&state.db, &id).await?;
+    let desired = desired::desired(&state.db, &state.secrets, &id, image.as_deref()).await?;
+    let doc = desired.doc;
     let turn: Vec<String> = sqlx::query_scalar(
         "SELECT turn_server_id FROM node_turn WHERE node_id = ? ORDER BY turn_server_id",
     )
@@ -583,6 +595,8 @@ pub async fn runtime_view(
         "settings": settings,
         "turn_server_ids": turn,
         "desired_version": doc.version,
+        // Заданы, но этой версии ноды неизвестны — в файл не попали.
+        "unsupported": desired.skipped,
         "provision": provision.and_then(|p| serde_json::from_str::<Value>(&p).ok()),
         "agent": agent,
         "applied": applied,

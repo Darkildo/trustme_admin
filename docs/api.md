@@ -277,7 +277,8 @@ interface NodeDetail extends NodeListItem {
 ```ts
 type Scope = "hot" | "new_sessions" | "restart";
 type Group = "messages" | "sessions" | "network" | "blobs" | "security" | "calls";
-type Unit = "count" | "per_second" | "bytes" | "bytes_per_day" | "seconds";
+type Unit = "count" | "per_second" | "bytes" | "bytes_per_day" | "seconds"
+  | "flag"; // переключатель: 0 — выключено, 1 — включено
 
 interface Setting {
   key: string;            // "rate_limit_send_msgs_per_sec"
@@ -287,8 +288,16 @@ interface Setting {
   zero_unlimited: boolean; // 0 — «без ограничения»
   default: number;
   summary: string;         // одна строка по-русски
+  since: string | null;    // "0.8.0" — версия ноды, с которой она знает настройку
 }
 ```
+
+Настройку с `since` ноде старше этой версии панель в `runtime.toml` не
+отправляет: незнакомое имя нода не пропускает и отвергает весь файл. Версия
+ноды берётся из тега образа (`node_image` из heartbeat, при установке —
+образ установки). Тег без версии (`stable`) или агент без `node_image` —
+отправляется всё. Сейчас такая настройка одна: `queue_addressing_enabled`
+(адресация по очередям, `flag`, `restart`, по умолчанию `1`) — с 0.8.0.
 
 Когда изменение вступает в силу (`scope`):
 
@@ -377,6 +386,7 @@ coturn ноды отдельно не удаляется → `409`.
   settings: Array<{ key: string; value: number; source: "profile" | "override" }>; // только заданные
   turn_server_ids: string[];
   desired_version: string;            // версия желаемого runtime.toml
+  unsupported: string[];              // заданы, но версия ноды их не знает — в файл не попали (`since`)
   provision: { public_host: string; port: number; backend: "sled" | "jetstream"; with_turn: boolean } | null;
   agent: { hostname: string; arch: string; tmnode_version: string;
            node_image: string | null;   // образ ноды из heartbeat (агент 0.7.0+)

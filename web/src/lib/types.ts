@@ -217,7 +217,7 @@ export interface AuditEntry {
 
 export type Scope = "hot" | "new_sessions" | "restart";
 export type SettingGroup = "messages" | "sessions" | "network" | "blobs" | "security" | "calls";
-export type SettingUnit = "count" | "per_second" | "bytes" | "bytes_per_day" | "seconds";
+export type SettingUnit = "count" | "per_second" | "bytes" | "bytes_per_day" | "seconds" | "flag";
 
 /** One entry of the node limits catalog (`GET /catalog`). */
 export interface Setting {
@@ -233,6 +233,11 @@ export interface Setting {
   default: number;
   /** One line, in Russian. */
   summary: string;
+  /**
+   * Node version that knows the setting («0.8.0»); older nodes do not get it in their
+   * runtime.toml (they would reject the whole file). null — every node knows it.
+   */
+  since?: string | null;
 }
 
 export type Settings = Record<string, number>;
@@ -319,6 +324,8 @@ export interface NodeRuntime {
   settings: RuntimeSetting[];
   turn_server_ids: string[];
   desired_version: string;
+  /** Set in the profile or overrides, but too new for this node's version: left out of its file. */
+  unsupported?: string[];
   provision: ProvisionInfo | null;
   agent: AgentInfo | null;
   applied: AppliedInfo | null;

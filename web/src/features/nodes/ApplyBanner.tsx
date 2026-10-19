@@ -1,4 +1,4 @@
-import { Power, Rocket, Terminal } from "lucide-react";
+import { History, Power, Rocket, Terminal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useUi } from "@/app/ui-context";
 import { useCan } from "@/app/useCurrentUser";
@@ -43,6 +43,7 @@ export function ApplyBanner({
           : "—",
   };
   const summaries = new Map(catalog.map((s) => [s.key, s.summary]));
+  const unsupported = runtime.unsupported ?? [];
 
   return (
     <section
@@ -108,6 +109,27 @@ export function ApplyBanner({
                 key={key}
                 title={summaries.get(key)}
                 className="inline-flex h-6 items-center rounded-sm border border-warn/30 bg-surface-1 px-2 font-mono text-[11px] text-fg"
+              >
+                {key}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {unsupported.length > 0 && (
+        <div className="border-t border-line bg-surface-1/60 px-4 py-3">
+          <p className="flex items-center gap-2 text-[13px] font-medium text-fg">
+            <History className="size-3.5 text-fg-subtle" aria-hidden />
+            {t("runtime.unsupported")}
+            <span className="font-mono text-xs text-fg-subtle tabular">{unsupported.length}</span>
+          </p>
+          <p className="mt-0.5 text-xs text-fg-muted">{t("runtime.unsupportedHint")}</p>
+          <ul className="mt-2 flex flex-wrap gap-1.5">
+            {unsupported.map((key) => (
+              <li
+                key={key}
+                title={summaries.get(key)}
+                className="inline-flex h-6 items-center rounded-sm border border-line bg-surface-1 px-2 font-mono text-[11px] text-fg"
               >
                 {key}
               </li>
