@@ -12,6 +12,7 @@ use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
+use tmnode::protocol::{TmnodeRelease, UpdateOrder, UpdateState, UpdateStatus, UpdateStep};
 
 use super::agents::INSTALL_SCRIPT;
 use crate::audit::{self, Actor};
@@ -26,6 +27,9 @@ pub const MIN_AGENT: Version = Version::new(0, 3, 0);
 pub const LOST_AFTER_SECS: u64 = 15 * 60;
 /// Сколько заданий показывать в истории ноды.
 const HISTORY_LIMIT: i64 = 50;
+/// Пределы полей из статуса агента.
+const IMAGE_LIMIT: usize = 256;
+const ERROR_LIMIT: usize = 4000;
 
 /// Команда, которой агент до 0.3.0 обновляют на самом сервере.
 pub fn agent_upgrade_command() -> String {
@@ -61,6 +65,51 @@ macro_rules! update_columns {
          error, from_node_image, to_node_image, from_tmnode, to_tmnode, created_by, created_at, \
          started_at, finished_at, reported_at"
     };
+}
+
+impl UpdateRow {
+    fn order(&self) -> UpdateOrder {
+        UpdateOrder {
+            id: self.id.clone(),
+            node_version: self.node_version.clone(),
+            tmnode: self
+                .tmnode_version
+                .clone()
+                .zip(self.tmnode_sha256.clone())
+                .map(|(version, sha256)| TmnodeRelease { version, sha256 }),
+            allow_downgrade: self.allow_downgrade,
+        }
+    }
+
+    fn is_active(&self) -> bool {
+        matches!(self.state.as_str(), "pending" | "running")
+    }
+}
+
+fn state_str(state: UpdateState) -> &'static str {
+    match state {
+        UpdateState::Running => "running",
+        UpdateState::Succeeded => "succeeded",
+        UpdateState::Failed => "failed",
+        UpdateState::RolledBack => "rolled_back",
+        UpdateState::Refused => "refused",
+    }
+}
+
+fn step_str(step: UpdateStep) -> &'static str {
+    match step {
+        UpdateStep::Check => "check",
+        UpdateStep::DownloadTmnode => "download_tmnode",
+        UpdateStep::RestartAgent => "restart_agent",
+        UpdateStep::PullImage => "pull_image",
+        UpdateStep::Recreate => "recreate",
+        UpdateStep::Verify => "verify",
+        UpdateStep::Rollback => "rollback",
+    }
+}
+
+fn clip(value: &Option<String>, limit: usize) -> Option<String> {
+    value.as_ref().map(|v| v.chars().take(limit).collect())
 }
 
 async fn active(db: &SqlitePool, node_id: &str) -> sqlx::Result<Option<UpdateRow>> {
@@ -123,6 +172,112 @@ pub async fn mark_lost(db: &SqlitePool, now: u64) -> sqlx::Result<()> {
             json!({ "node_id": node_id, "update_id": id, "state": "lost", "step": step }),
         )
         .await?;
+    }
+    Ok(())
+}
+
+/// Задание для ответа heartbeat: активное, пока агент не прислал итог.
+pub async fn order_for(db: &SqlitePool, node_id: &str) -> sqlx::Result<Option<UpdateOrder>> {
+    Ok(active(db, node_id).await?.map(|row| row.order()))
+}
+
+/// Статус задания из heartbeat. Чужой или неизвестный id — в лог и мимо.
+pub async fn on_status(
+    db: &SqlitePool,
+    node_id: &str,
+    status: &UpdateStatus,
+    ip: Option<&str>,
+) -> sqlx::Result<()> {
+    let id = status.id.trim().to_ascii_lowercase();
+    let row = match by_id(db, &id).await? {
+        Some(row) if row.node_id == node_id => row,
+        Some(_) => {
+            tracing::warn!(node = %node_id, update = %id, "agent reported an update of another node");
+            return Ok(());
+        }
+        None => {
+            tracing::warn!(node = %node_id, update = %id, "agent reported an unknown update");
+            return Ok(());
+        }
+    };
+    let now = now() as i64;
+    let step = status.step.map(step_str);
+    let from_image = clip(&status.from_node_image, IMAGE_LIMIT);
+    let to_image = clip(&status.node_image, IMAGE_LIMIT);
+    let from_tmnode = clip(&status.from_tmnode, 64);
+    let to_tmnode = clip(&status.tmnode, 64);
+    match (row.state.as_str(), status.state) {
+        ("pending" | "running", UpdateState::Running) => {
+            sqlx::query(
+                "UPDATE node_updates SET state = 'running', step = ?,
+                        started_at = COALESCE(started_at, ?), reported_at = ?,
+                        from_node_image = COALESCE(?, from_node_image),
+                        from_tmnode = COALESCE(?, from_tmnode),
+                        to_node_image = COALESCE(?, to_node_image),
+                        to_tmnode = COALESCE(?, to_tmnode)
+                 WHERE id = ? AND state IN ('pending', 'running')",
+            )
+            .bind(step)
+            .bind(now)
+            .bind(now)
+            .bind(&from_image)
+            .bind(&from_tmnode)
+            .bind(&to_image)
+            .bind(&to_tmnode)
+            .bind(&id)
+            .execute(db)
+            .await?;
+        }
+        // Итог. Отменённое или потерянное панелью задание агент всё же
+        // выполнил — правду знает он: итог записывается поверх.
+        ("pending" | "running" | "cancelled" | "lost", state) if state.is_final() => {
+            let state = state_str(state);
+            let error = clip(&status.error, ERROR_LIMIT);
+            sqlx::query(
+                "UPDATE node_updates SET state = ?, step = ?, error = ?,
+                        started_at = COALESCE(started_at, ?), finished_at = ?, reported_at = ?,
+                        from_node_image = COALESCE(?, from_node_image),
+                        from_tmnode = COALESCE(?, from_tmnode),
+                        to_node_image = COALESCE(?, to_node_image),
+                        to_tmnode = COALESCE(?, to_tmnode)
+                 WHERE id = ?",
+            )
+            .bind(state)
+            .bind(step)
+            .bind(&error)
+            .bind(now)
+            .bind(now)
+            .bind(now)
+            .bind(&from_image)
+            .bind(&from_tmnode)
+            .bind(&to_image)
+            .bind(&to_tmnode)
+            .bind(&id)
+            .execute(db)
+            .await?;
+            audit::record(
+                db,
+                Actor::Named {
+                    id: None,
+                    username: "agent",
+                    ip,
+                },
+                "node.update_finished",
+                Some(&node_name(db, node_id).await?),
+                json!({
+                    "node_id": node_id, "update_id": id, "state": state, "step": step,
+                    "error": error, "late": !row.is_active(),
+                    "from_node_image": from_image, "node_image": to_image,
+                    "from_tmnode": from_tmnode, "tmnode": to_tmnode,
+                }),
+            )
+            .await?;
+        }
+        ("cancelled" | "lost", _) => {
+            tracing::warn!(node = %node_id, update = %id, state = %row.state, "agent is running an update the panel has closed");
+        }
+        // Повтор итога: агент присылает его, пока не увидит ответ без задания.
+        _ => {}
     }
     Ok(())
 }
@@ -504,6 +659,30 @@ pub async fn cancel(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wire_names_match_the_protocol() {
+        for state in [
+            UpdateState::Running,
+            UpdateState::Succeeded,
+            UpdateState::Failed,
+            UpdateState::RolledBack,
+            UpdateState::Refused,
+        ] {
+            assert_eq!(serde_json::to_value(state).unwrap(), state_str(state));
+        }
+        for step in [
+            UpdateStep::Check,
+            UpdateStep::DownloadTmnode,
+            UpdateStep::RestartAgent,
+            UpdateStep::PullImage,
+            UpdateStep::Recreate,
+            UpdateStep::Verify,
+            UpdateStep::Rollback,
+        ] {
+            assert_eq!(serde_json::to_value(step).unwrap(), step_str(step));
+        }
+    }
 
     #[test]
     fn upgrade_command_uses_the_stable_installer() {

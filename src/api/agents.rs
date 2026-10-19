@@ -386,8 +386,9 @@ pub async fn enroll(
     }))
 }
 
-/// `POST /agent/heartbeat` — отчёт и статус от агента, в ответ — желаемые
-/// настройки.
+/// `POST /agent/heartbeat` — отчёт, статус настроек и ход обновления от
+/// агента; в ответ — желаемые настройки и задание на обновление, пока агент
+/// не сообщил по нему итог.
 pub async fn heartbeat(
     State(state): State<AppState>,
     ip: ClientIp,
@@ -403,14 +404,23 @@ pub async fn heartbeat(
     let (agent_id, node_id) = agent.ok_or_else(ApiError::unauthorized)?;
     let now = now();
     sqlx::query(
-        "UPDATE agents SET last_seen_at = ?, tmnode_version = ?, runtime_status = ? WHERE id = ?",
+        "UPDATE agents SET last_seen_at = ?, tmnode_version = ?, runtime_status = ?, node_image = ?
+         WHERE id = ?",
     )
     .bind(now as i64)
     .bind(beat.tmnode_version.chars().take(64).collect::<String>())
     .bind(beat.runtime_status.as_ref().map(Value::to_string))
+    .bind(
+        beat.node_image
+            .as_ref()
+            .map(|i| i.chars().take(256).collect::<String>()),
+    )
     .bind(&agent_id)
     .execute(&state.db)
     .await?;
+    if let Some(status) = &beat.update {
+        super::updates::on_status(&state.db, &node_id, status, ip.0.as_deref()).await?;
+    }
 
     if let Some(key) = beat
         .node_key
@@ -433,7 +443,7 @@ pub async fn heartbeat(
     Ok(Json(HeartbeatResponse {
         interval_secs: DEFAULT_INTERVAL_SECS,
         runtime: Some(desired::desired(&state.db, &state.secrets, &node_id).await?),
-        update: None,
+        update: super::updates::order_for(&state.db, &node_id).await?,
     }))
 }
 
@@ -480,18 +490,22 @@ async fn learn_key(state: &AppState, node_id: &str, key: &str, now: u64) -> ApiR
 
 /// Агент ноды для карточки и списка.
 pub async fn agent_json(state: &AppState, node_id: &str) -> ApiResult<Value> {
-    let row: Option<(String, String, String, i64, Option<i64>)> = sqlx::query_as(
-        "SELECT hostname, arch, tmnode_version, enrolled_at, last_seen_at FROM agents WHERE node_id = ?",
+    // hostname, arch, tmnode_version, enrolled_at, last_seen_at, node_image
+    type Row = (String, String, String, i64, Option<i64>, Option<String>);
+    let row: Option<Row> = sqlx::query_as(
+        "SELECT hostname, arch, tmnode_version, enrolled_at, last_seen_at, node_image
+         FROM agents WHERE node_id = ?",
     )
     .bind(node_id)
     .fetch_optional(&state.db)
     .await?;
     Ok(match row {
         None => Value::Null,
-        Some((hostname, arch, version, enrolled_at, last_seen_at)) => json!({
+        Some((hostname, arch, version, enrolled_at, last_seen_at, node_image)) => json!({
             "hostname": hostname,
             "arch": arch,
             "tmnode_version": version,
+            "node_image": node_image,
             "enrolled_at": enrolled_at,
             "last_seen_at": last_seen_at,
             "online": last_seen_at.is_some_and(|at| now().saturating_sub(at as u64) <= DEFAULT_INTERVAL_SECS * ONLINE_INTERVALS),

@@ -16,6 +16,7 @@ use trustme_admin::{AppState, api, app, db};
 
 const PASSWORD: &str = "correct horse battery";
 const IMAGE_V6: &str = "ghcr.io/darkildo/trustme_backend:v0.6.0";
+const IMAGE_V7: &str = "ghcr.io/darkildo/trustme_backend:v0.7.0";
 
 fn sha(c: char) -> String {
     c.to_string().repeat(64)
@@ -234,6 +235,15 @@ struct Agent {
     tmnode: String,
 }
 
+fn progress(id: &str, state: &str, step: &str, error: Option<&str>) -> Value {
+    json!({
+        "id": id, "state": state, "step": step, "error": error,
+        "started_at": 1_792_443_630u64, "finished_at": null,
+        "from_node_image": IMAGE_V6, "node_image": if state == "succeeded" { IMAGE_V7 } else { IMAGE_V6 },
+        "from_tmnode": "0.3.0", "tmnode": "0.7.0",
+    })
+}
+
 #[tokio::test]
 async fn releases_are_listed_with_tmnode_binaries() {
     let h = Harness::new().await;
@@ -259,6 +269,276 @@ async fn releases_are_listed_with_tmnode_binaries() {
     let (_, body) = off.call("GET", "/releases", None).await;
     assert_eq!(body["enabled"], false);
     assert!(body["releases"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn update_runs_through_heartbeats() {
+    let h = Harness::new().await;
+    let agent = h
+        .managed_node("Берлин", "203.0.113.10", "x86_64", "0.3.0")
+        .await;
+    let node = &agent.node;
+
+    let (_, view) = h.call("GET", &format!("/nodes/{node}/updates"), None).await;
+    assert_eq!(view["current"]["node_image"], IMAGE_V6);
+    assert_eq!(view["current"]["node_image_source"], "agent");
+    assert_eq!(view["current"]["node_version"], "0.6.0");
+    assert_eq!(view["current"]["tmnode_version"], "0.3.0");
+    assert_eq!(view["current"]["supports_updates"], true);
+    assert!(view["updates"].as_array().unwrap().is_empty());
+
+    // Задание: sha256 — из SHA256SUMS под архитектуру агента.
+    let (status, body) = h
+        .call(
+            "POST",
+            &format!("/nodes/{node}/update"),
+            Some(json!({ "node_version": "0.7.0", "tmnode_version": "v0.7.0" })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let update = body["update"].clone();
+    let id = update["id"].as_str().unwrap().to_owned();
+    assert_eq!(id, id.to_ascii_lowercase(), "ULID строчными");
+    assert_eq!(id.len(), 26);
+    assert_eq!(update["state"], "pending");
+    assert_eq!(update["tmnode_sha256"], sha('7'));
+    assert_eq!(update["created_by"], "alice");
+    assert_eq!(h.audit("node.update_created").await.len(), 1);
+
+    // Второе задание, пока первое не завершено, — 409.
+    let (status, _) = h
+        .call(
+            "POST",
+            &format!("/nodes/{node}/update"),
+            Some(json!({ "node_version": "0.7.0" })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+
+    // Heartbeat без статуса — задание в ответе.
+    let (_, reply) = h.beat(&agent, Some(IMAGE_V6), None).await;
+    assert_eq!(reply["update"]["id"], id.as_str());
+    assert_eq!(reply["update"]["node_version"], "0.7.0");
+    assert_eq!(
+        reply["update"]["tmnode"],
+        json!({ "version": "0.7.0", "sha256": sha('7') })
+    );
+    assert_eq!(reply["update"]["allow_downgrade"], false);
+
+    // running: задание остаётся в ответе, шаг виден в истории.
+    let (_, reply) = h
+        .beat(
+            &agent,
+            Some(IMAGE_V6),
+            Some(status_of(&id, "running", "pull_image")),
+        )
+        .await;
+    assert_eq!(reply["update"]["id"], id.as_str());
+    let (_, view) = h.call("GET", &format!("/nodes/{node}/updates"), None).await;
+    let job = &view["updates"][0];
+    assert_eq!(job["state"], "running");
+    assert_eq!(job["step"], "pull_image");
+    assert_eq!(job["from_node_image"], IMAGE_V6);
+    assert!(job["started_at"].is_i64());
+    let (status, _) = h
+        .call("POST", &format!("/nodes/{node}/updates/{id}/cancel"), None)
+        .await;
+    assert_eq!(status, StatusCode::CONFLICT, "агент уже начал");
+
+    // Итог: задания в ответе больше нет, образ ноды — новый.
+    let (_, reply) = h
+        .beat(
+            &agent,
+            Some(IMAGE_V7),
+            Some(progress(&id, "succeeded", "verify", None)),
+        )
+        .await;
+    assert!(reply["update"].is_null(), "{reply}");
+    let (_, view) = h.call("GET", &format!("/nodes/{node}/updates"), None).await;
+    let job = &view["updates"][0];
+    assert_eq!(job["state"], "succeeded");
+    assert_eq!(job["to_node_image"], IMAGE_V7);
+    assert_eq!(job["to_tmnode"], "0.7.0");
+    assert!(job["finished_at"].is_i64());
+    assert_eq!(view["current"]["node_version"], "0.7.0");
+
+    // Повтор итога ничего не меняет и не пишет журнал второй раз.
+    let (_, reply) = h
+        .beat(
+            &agent,
+            Some(IMAGE_V7),
+            Some(progress(&id, "succeeded", "verify", None)),
+        )
+        .await;
+    assert!(reply["update"].is_null());
+    let finished = h.audit("node.update_finished").await;
+    assert_eq!(finished.len(), 1);
+    assert_eq!(finished[0]["details"]["state"], "succeeded");
+    assert_eq!(finished[0]["user"], "agent");
+
+    // Теперь 0.7.0 — текущая: 0.6.0 без allow_downgrade — понижение.
+    let (status, body) = h
+        .call(
+            "POST",
+            &format!("/nodes/{node}/update"),
+            Some(json!({ "node_version": "0.6.0" })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    let (status, body) = h
+        .call(
+            "POST",
+            &format!("/nodes/{node}/update"),
+            Some(json!({ "node_version": "0.6.0", "allow_downgrade": true })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let (_, reply) = h.beat(&agent, Some(IMAGE_V7), None).await;
+    assert_eq!(reply["update"]["allow_downgrade"], true);
+    assert!(reply["update"]["tmnode"].is_null());
+}
+
+fn status_of(id: &str, state: &str, step: &str) -> Value {
+    progress(id, state, step, None)
+}
+
+#[tokio::test]
+async fn rolled_back_and_refused_are_final() {
+    let h = Harness::new().await;
+    let agent = h
+        .managed_node("Откат", "203.0.113.11", "x86_64", "0.3.0")
+        .await;
+    let node = &agent.node;
+    let path = format!("/nodes/{node}/update");
+    let create = |body: Value| h.call("POST", &path, Some(body));
+
+    let (_, body) = create(json!({ "node_version": "0.7.0" })).await;
+    let id = body["update"]["id"].as_str().unwrap().to_owned();
+    h.beat(
+        &agent,
+        Some(IMAGE_V6),
+        Some(status_of(&id, "running", "recreate")),
+    )
+    .await;
+    let (_, reply) = h
+        .beat(
+            &agent,
+            Some(IMAGE_V6),
+            Some(progress(
+                &id,
+                "rolled_back",
+                "rollback",
+                Some("рукопожатие не прошло"),
+            )),
+        )
+        .await;
+    assert!(reply["update"].is_null());
+    let (_, view) = h.call("GET", &format!("/nodes/{node}/updates"), None).await;
+    assert_eq!(view["updates"][0]["state"], "rolled_back");
+    assert_eq!(view["updates"][0]["step"], "rollback");
+    assert_eq!(view["updates"][0]["error"], "рукопожатие не прошло");
+    assert_eq!(view["current"]["node_version"], "0.6.0");
+
+    // Отказ приходит сразу итогом, без running.
+    let (status, body) = create(json!({ "tmnode_version": "0.7.0" })).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let id = body["update"]["id"].as_str().unwrap().to_owned();
+    let (_, reply) = h
+        .beat(
+            &agent,
+            Some(IMAGE_V6),
+            Some(progress(
+                &id,
+                "refused",
+                "check",
+                Some("management.mode не managed"),
+            )),
+        )
+        .await;
+    assert!(reply["update"].is_null());
+    let (_, view) = h.call("GET", &format!("/nodes/{node}/updates"), None).await;
+    let job = &view["updates"][0];
+    assert_eq!(job["state"], "refused");
+    assert!(job["started_at"].is_i64() && job["finished_at"].is_i64());
+    let states: Vec<Value> = h
+        .audit("node.update_finished")
+        .await
+        .iter()
+        .map(|e| e["details"]["state"].clone())
+        .collect();
+    assert_eq!(states, [json!("refused"), json!("rolled_back")]);
+}
+
+#[tokio::test]
+async fn cancel_only_while_pending() {
+    let h = Harness::new().await;
+    let agent = h
+        .managed_node("Отмена", "203.0.113.12", "x86_64", "0.3.0")
+        .await;
+    let node = &agent.node;
+    let (_, body) = h
+        .call(
+            "POST",
+            &format!("/nodes/{node}/update"),
+            Some(json!({ "node_version": "0.7.0" })),
+        )
+        .await;
+    let id = body["update"]["id"].as_str().unwrap().to_owned();
+    let (status, body) = h
+        .call(
+            "POST",
+            &format!("/nodes/{node}/updates/{}/cancel", id.to_ascii_uppercase()),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["update"]["state"], "cancelled");
+    assert_eq!(h.audit("node.update_cancelled").await.len(), 1);
+    let (_, reply) = h.beat(&agent, Some(IMAGE_V6), None).await;
+    assert!(reply["update"].is_null(), "отменённое не выдаётся");
+    let (status, _) = h
+        .call("POST", &format!("/nodes/{node}/updates/{id}/cancel"), None)
+        .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    let (status, _) = h
+        .call("POST", &format!("/nodes/{node}/updates/nope/cancel"), None)
+        .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // Агент успел начать до отмены: running не воскрешает задание, итог —
+    // записывается.
+    h.beat(
+        &agent,
+        Some(IMAGE_V6),
+        Some(status_of(&id, "running", "pull_image")),
+    )
+    .await;
+    let (_, view) = h.call("GET", &format!("/nodes/{node}/updates"), None).await;
+    assert_eq!(view["updates"][0]["state"], "cancelled");
+    let (_, reply) = h
+        .beat(
+            &agent,
+            Some(IMAGE_V7),
+            Some(progress(&id, "succeeded", "verify", None)),
+        )
+        .await;
+    assert!(reply["update"].is_null());
+    let (_, view) = h.call("GET", &format!("/nodes/{node}/updates"), None).await;
+    assert_eq!(view["updates"][0]["state"], "succeeded");
+    assert_eq!(
+        h.audit("node.update_finished").await[0]["details"]["late"],
+        true
+    );
+
+    // Новое задание после отмены — можно.
+    let (status, _) = h
+        .call(
+            "POST",
+            &format!("/nodes/{node}/update"),
+            Some(json!({ "tmnode_version": "0.7.0" })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED);
 }
 
 #[tokio::test]
@@ -307,7 +587,6 @@ async fn bad_requests_are_refused() {
     let (status, body) = create(node.clone(), json!({ "tmnode_version": "0.7.0" })).await;
     assert_eq!(status, StatusCode::CREATED, "{body}");
     assert_eq!(body["update"]["tmnode_sha256"], sha('a'), "aarch64");
-    assert_eq!(h.audit("node.update_created").await.len(), 1);
 
     // Нода по адресу и пину, нода без агента, нет ноды.
     let (_, manual) = h
@@ -386,6 +665,120 @@ async fn old_agent_gets_the_upgrade_command() {
     assert_eq!(view["current"]["node_image"], IMAGE_V6);
     assert_eq!(view["current"]["node_image_source"], "report");
     assert_eq!(view["current"]["node_version"], "0.6.0");
+}
+
+#[tokio::test]
+async fn silent_agent_loses_the_update() {
+    let h = Harness::new().await;
+    let agent = h
+        .managed_node("Молчун", "203.0.113.16", "x86_64", "0.3.0")
+        .await;
+    let node = &agent.node;
+    let (_, body) = h
+        .call(
+            "POST",
+            &format!("/nodes/{node}/update"),
+            Some(json!({ "node_version": "0.7.0" })),
+        )
+        .await;
+    let id = body["update"]["id"].as_str().unwrap().to_owned();
+    h.beat(
+        &agent,
+        Some(IMAGE_V6),
+        Some(status_of(&id, "running", "pull_image")),
+    )
+    .await;
+
+    // Свежий running не теряется.
+    let (_, view) = h.call("GET", &format!("/nodes/{node}/updates"), None).await;
+    assert_eq!(view["updates"][0]["state"], "running");
+
+    let long_ago = trustme_admin::now() as i64 - api::LOST_AFTER_SECS as i64 - 60;
+    sqlx::query("UPDATE node_updates SET reported_at = ? WHERE id = ?")
+        .bind(long_ago)
+        .bind(&id)
+        .execute(&h.db)
+        .await
+        .unwrap();
+    let (_, view) = h.call("GET", &format!("/nodes/{node}/updates"), None).await;
+    let job = &view["updates"][0];
+    assert_eq!(job["state"], "lost");
+    assert!(job["error"].as_str().unwrap().contains("tmnode-agent"));
+    let lost = h.audit("node.update_finished").await;
+    assert_eq!(lost.len(), 1);
+    assert_eq!(lost[0]["details"]["state"], "lost");
+    assert_eq!(lost[0]["user"], "system");
+
+    // Потерянное не мешает новому и не выдаётся агенту.
+    let (_, reply) = h.beat(&agent, Some(IMAGE_V6), None).await;
+    assert!(reply["update"].is_null());
+
+    // Агент вернулся с итогом — записывается поверх lost.
+    h.beat(
+        &agent,
+        Some(IMAGE_V6),
+        Some(progress(&id, "failed", "pull_image", Some("нет сети"))),
+    )
+    .await;
+    let (_, view) = h.call("GET", &format!("/nodes/{node}/updates"), None).await;
+    assert_eq!(view["updates"][0]["state"], "failed");
+    assert_eq!(view["updates"][0]["error"], "нет сети");
+    let (status, _) = h
+        .call(
+            "POST",
+            &format!("/nodes/{node}/update"),
+            Some(json!({ "node_version": "0.7.0" })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED);
+}
+
+#[tokio::test]
+async fn foreign_and_unknown_statuses_are_ignored() {
+    let h = Harness::new().await;
+    let a = h
+        .managed_node("Первая", "203.0.113.17", "x86_64", "0.3.0")
+        .await;
+    let b = h
+        .managed_node("Вторая", "203.0.113.18", "x86_64", "0.3.0")
+        .await;
+    let (_, body) = h
+        .call(
+            "POST",
+            &format!("/nodes/{}/update", a.node),
+            Some(json!({ "node_version": "0.7.0" })),
+        )
+        .await;
+    let id = body["update"]["id"].as_str().unwrap().to_owned();
+
+    // Агент второй ноды присылает итог чужого задания.
+    let (status, reply) = h
+        .beat(
+            &b,
+            Some(IMAGE_V6),
+            Some(progress(&id, "succeeded", "verify", None)),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(reply["update"].is_null());
+    let (status, _) = h
+        .beat(
+            &b,
+            Some(IMAGE_V6),
+            Some(progress(
+                "01jbzzzzzzzzzzzzzzzzzzzzzz",
+                "running",
+                "check",
+                None,
+            )),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, view) = h
+        .call("GET", &format!("/nodes/{}/updates", a.node), None)
+        .await;
+    assert_eq!(view["updates"][0]["state"], "pending");
+    assert!(h.audit("node.update_finished").await.is_empty());
 }
 
 #[tokio::test]
