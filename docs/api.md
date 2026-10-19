@@ -401,6 +401,7 @@ coturn ноды отдельно не удаляется → `409`.
   port?: number;                         // 18081
   backend?: "sled" | "jetstream";        // sled
   with_turn?: boolean;                   // поставить coturn рядом с нодой
+  auto_blob_reserve?: boolean;           // true: подобрать резерв диска по первому отчёту
   profile_id?: string; turn_server_ids?: string[];
   labels?: Record<string, string> }
 ```
@@ -420,6 +421,39 @@ coturn ноды отдельно не удаляется → `409`.
 
 `POST /nodes/{id}/enroll-token` (admin+) → `{ enroll }` — новая команда,
 прежняя гаснет. Для ноды, добавленной по адресу и пину, — `409`.
+
+### Резерв диска под файлы
+
+На маленьком диске резерв по умолчанию (`blob_disk_reserve_bytes`, 5 ГиБ)
+бывает больше свободного места: загрузка файлов получает `QUOTA`, а отчёт —
+предупреждение `host.blob_reserve`. Панель подбирает резерв и задаёт его
+переопределением ноды; агент доставит, нода применит без перезапуска.
+
+Правило: 10 % диска (`host.disk.total_bytes`), от 512 МиБ до 5 ГиБ, кратно
+256 МиБ, и не больше половины свободного места. Если так выходит меньше
+512 МиБ, диск почти полон — подбирать нечего, нужно место.
+
+`GET /nodes/{id}/blob-reserve` →
+
+```ts
+{ available_bytes: number | null;  // host.blob_reserve последнего отчёта
+  total_bytes: number | null;      // host.disk
+  reserve_bytes: number | null;    // резерв, с которым сравнивал tmnode
+  suggested_bytes: number | null;  // null — места хватает, нет данных или в панели уже не больше
+  panel_bytes: number | null;      // blob_disk_reserve_bytes в настройках панели (профиль + переопределение)
+  managed: boolean }               // у ноды есть агент
+```
+
+`POST /nodes/{id}/blob-reserve` (admin+) → `{ reserve_bytes }` — записать
+подобранный резерв в переопределения ноды. `409` — подбирать нечего или у
+ноды нет агента (тогда `BLOB_DISK_RESERVE_BYTES` задают в окружении ноды).
+
+С `auto_blob_reserve` (по умолчанию) панель делает то же сама, один раз —
+по первому отчёту новой ноды, где видно место под файлы.
+
+`tmnode doctor` 0.2.0 сравнивает с резервом из окружения контейнера и не
+видит `runtime.toml`, поэтому предупреждение в отчёте может остаться и после
+подбора, хотя нода уже работает с новым резервом.
 
 ### Установка по SSH
 
@@ -468,7 +502,7 @@ coturn ноды отдельно не удаляется → `409`.
 |---|---|
 | Профили | `profile.created`, `profile.updated`, `profile.made_default`, `profile.deleted` |
 | TURN | `turn.created`, `turn.updated`, `turn.deleted` |
-| Ноды и агенты | `node.provisioned`, `node.enroll_token`, `node.ssh_install`, `agent.enrolled` |
+| Ноды и агенты | `node.provisioned`, `node.enroll_token`, `node.ssh_install`, `node.blob_reserve`, `agent.enrolled` |
 
 ### Новое событие
 

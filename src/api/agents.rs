@@ -44,6 +44,9 @@ pub struct Provision {
     pub port: u16,
     pub backend: Backend,
     pub with_turn: bool,
+    /// Подобрать резерв диска под файлы по первому отчёту (одноразово).
+    #[serde(default)]
+    pub auto_blob_reserve: bool,
 }
 
 /// Команда, которую администратор запускает на чистом сервере.
@@ -59,6 +62,8 @@ pub struct ProvisionIn {
     backend: Option<Backend>,
     #[serde(default)]
     with_turn: bool,
+    /// По умолчанию — да: на маленьком диске резерв 5 ГиБ не даст грузить файлы.
+    auto_blob_reserve: Option<bool>,
     profile_id: Option<String>,
     #[serde(default)]
     turn_server_ids: Vec<String>,
@@ -157,6 +162,7 @@ pub async fn provision(
         port,
         backend: input.backend.unwrap_or(Backend::Sled),
         with_turn: input.with_turn,
+        auto_blob_reserve: input.auto_blob_reserve.unwrap_or(true),
     };
     let id = new_id();
     let now = now() as i64;
@@ -384,6 +390,7 @@ pub async fn enroll(
 /// настройки.
 pub async fn heartbeat(
     State(state): State<AppState>,
+    ip: ClientIp,
     headers: HeaderMap,
     Json(beat): Json<Heartbeat>,
 ) -> ApiResult<Json<HeartbeatResponse>> {
@@ -416,6 +423,7 @@ pub async fn heartbeat(
         match parse_report(report.to_string().as_bytes()) {
             Ok(report) => {
                 store_report(&state.db, &node_id, &report, now).await?;
+                super::blob_reserve::auto_after_report(&state, &node_id, &report, ip).await?;
             }
             Err(err) => {
                 tracing::warn!(node = %node_id, error = %err.message, "agent sent an unreadable report")

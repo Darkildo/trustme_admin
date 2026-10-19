@@ -3,6 +3,7 @@
 mod agents;
 mod audit_log;
 mod auth;
+mod blob_reserve;
 mod ingest;
 mod limits;
 mod nodes;
@@ -78,6 +79,10 @@ pub fn router(_state: AppState) -> Router<AppState> {
         .route("/nodes/provision", post(agents::provision))
         .route("/nodes/{id}/enroll-token", post(agents::new_enroll_token))
         .route("/nodes/{id}/runtime", get(agents::runtime_view))
+        .route(
+            "/nodes/{id}/blob-reserve",
+            get(blob_reserve::view).post(blob_reserve::apply),
+        )
         .route("/nodes/{id}/ssh-install", post(agents::ssh_install))
         .route("/jobs/{id}", get(agents::job))
         .route("/agent/enroll", post(agents::enroll))

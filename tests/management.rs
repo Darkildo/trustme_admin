@@ -530,3 +530,116 @@ async fn provisioned_node_enrolls_reports_and_follows_settings() {
     let (status, _) = h.call("POST", "/nodes/missing/enroll-token", None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+/// Отчёт `tmnode doctor`: на диске 13,5 ГиБ свободно 4,4 — меньше резерва 5 ГиБ.
+fn short_disk_report() -> Value {
+    json!({
+        "format": "tmnode.report/1", "tmnode_version": "0.2.0", "generated_at": 1,
+        "target": {}, "status": "warn",
+        "counts": { "ok": 1, "skip": 0, "warn": 1, "error": 0, "fail": 0 },
+        "checks": [
+            { "id": "host.disk", "status": "ok", "summary": "",
+              "data": { "available_bytes": 4_766_261_248u64, "total_bytes": 14_483_001_344u64 } },
+            { "id": "host.blob_reserve", "status": "warn",
+              "summary": "свободно 4.4 ГиБ при резерве 5.0 ГиБ: загрузка файлов получает QUOTA",
+              "data": { "available_bytes": 4_766_261_248u64, "reserve_bytes": 5_368_709_120u64 } }
+        ]
+    })
+}
+
+/// Подготовить ноду, поставить агента и прислать первый отчёт.
+async fn enrolled_node(h: &Harness, name: &str, host: &str, auto: Option<bool>) -> String {
+    let mut body = json!({ "name": name, "public_host": host });
+    if let Some(auto) = auto {
+        body["auto_blob_reserve"] = json!(auto);
+    }
+    let (status, body) = h.call("POST", "/nodes/provision", Some(body)).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let node = body["node_id"].as_str().unwrap().to_owned();
+    let token = body["enroll"]["token"].as_str().unwrap();
+    let (_, reply, _) = h
+        .send(
+            "POST",
+            "/agent/enroll",
+            Some(json!({ "token": token, "hostname": "vps", "arch": "x86_64", "tmnode_version": "0.2.0" })),
+            Some("x"),
+        )
+        .await;
+    let agent = reply["agent_token"].as_str().unwrap().to_owned();
+    let beat = json!({
+        "tmnode_version": "0.2.0", "node_key": "cd".repeat(32), "report": short_disk_report(),
+        "runtime_status": { "result": "applied", "version": "x", "pending_restart": [] }
+    });
+    let (status, reply, _) = h
+        .send("POST", "/agent/heartbeat", Some(beat), Some(&agent))
+        .await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    node
+}
+
+#[tokio::test]
+async fn blob_reserve_is_fitted_to_small_disks() {
+    const FITTED: u64 = 1280 << 20; // 10 % от 13,5 ГиБ, кратно 256 МиБ
+
+    // По умолчанию панель сама подбирает резерв по первому отчёту.
+    let h = Harness::new().await;
+    let auto = enrolled_node(&h, "Авто", "203.0.113.20", None).await;
+    let (_, view) = h
+        .call("GET", &format!("/nodes/{auto}/blob-reserve"), None)
+        .await;
+    assert_eq!(view["panel_bytes"], FITTED);
+    assert_eq!(
+        view["reserve_bytes"],
+        5u64 << 30,
+        "отчёт tmnode пока прежний"
+    );
+    assert!(
+        view["suggested_bytes"].is_null(),
+        "в панели резерв уже подобран: {view}"
+    );
+    let (_, runtime) = h.call("GET", &format!("/nodes/{auto}/runtime"), None).await;
+    assert_eq!(runtime["state"], "pending", "новый runtime ждёт агента");
+    let (_, log) = h.call("GET", "/audit", None).await;
+    let entry = log["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["action"] == "node.blob_reserve")
+        .unwrap()
+        .clone();
+    assert_eq!(entry["details"]["auto"], true);
+    assert_eq!(entry["details"]["to"], FITTED);
+
+    // Без автоподбора — предложение и кнопка.
+    let manual = enrolled_node(&h, "Кнопка", "203.0.113.21", Some(false)).await;
+    let path = format!("/nodes/{manual}/blob-reserve");
+    let (_, view) = h.call("GET", &path, None).await;
+    assert!(view["panel_bytes"].is_null());
+    assert_eq!(view["suggested_bytes"], FITTED);
+    assert_eq!(view["total_bytes"], 14_483_001_344u64);
+    assert_eq!(view["managed"], true);
+    let (status, body) = h.call("POST", &path, None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["reserve_bytes"], FITTED);
+    let (_, view) = h.call("GET", &path, None).await;
+    assert_eq!(view["panel_bytes"], FITTED);
+    let (status, _) = h.call("POST", &path, None).await;
+    assert_eq!(status, StatusCode::CONFLICT, "второй раз подбирать нечего");
+
+    // Нода без агента: настройку панель не доставит.
+    let (_, created) = h
+        .call(
+            "POST",
+            "/nodes",
+            Some(json!({ "name": "Ручная", "addr": "198.51.100.2:18081", "node_key": "ef".repeat(32) })),
+        )
+        .await;
+    let plain = created["node"]["id"].as_str().unwrap();
+    let path = format!("/nodes/{plain}/blob-reserve");
+    let (_, view) = h.call("GET", &path, None).await;
+    assert_eq!(view["managed"], false);
+    let (status, _) = h.call("POST", &path, None).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    let (status, _) = h.call("GET", "/nodes/missing/blob-reserve", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
