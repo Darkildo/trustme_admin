@@ -4376,8 +4376,8 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "tmnode"
-version = "0.7.0"
-source = "git+https://github.com/Darkildo/trustme_backend?tag=v0.7.0#0cc25f8a185e8deb0a10a78b2c6c19b787d48515"
+version = "0.8.0"
+source = "git+https://github.com/Darkildo/trustme_backend?branch=feat%2Fqueue-addressing-default#7e579bbdf00851e22083a105242b069e513579a4"
 dependencies = [
  "anyhow",
  "fs2",
@@ -4732,8 +4732,8 @@ dependencies = [
 
 [[package]]
 name = "trust_message_tcp"
-version = "0.7.0"
-source = "git+https://github.com/Darkildo/trustme_backend?tag=v0.7.0#0cc25f8a185e8deb0a10a78b2c6c19b787d48515"
+version = "0.8.0"
+source = "git+https://github.com/Darkildo/trustme_backend?branch=feat%2Fqueue-addressing-default#7e579bbdf00851e22083a105242b069e513579a4"
 dependencies = [
  "anyhow",
  "async-nats",
