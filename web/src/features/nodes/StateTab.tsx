@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import type { NodeDetail } from "@/lib/types";
 import { useNow } from "@/lib/useNow";
+import { BLOB_RESERVE_CHECK } from "./blobReserve";
+import { BlobReserveFix } from "./BlobReserveFix";
 import { CheckGroups, CountsBar } from "./CheckGroups";
 
 const STALE_SECS = 3 * 3600;
@@ -80,7 +82,12 @@ export function StateTab({ node, onConnect }: { node: NodeDetail; onConnect: () 
           {t("checks.staleWarn")}
         </div>
       )}
-      <CheckGroups checks={report.checks} />
+      <CheckGroups
+        checks={report.checks}
+        renderAction={(c) =>
+          c.id === BLOB_RESERVE_CHECK ? <BlobReserveFix node={node} check={c} /> : null
+        }
+      />
     </div>
   );
 }

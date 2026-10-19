@@ -15,6 +15,7 @@ export const qk = {
   reports: (id: string) => ["nodes", id, "reports"] as const,
   report: (id: string, rid: string) => ["nodes", id, "reports", rid] as const,
   runtime: (id: string) => ["nodes", id, "runtime"] as const,
+  blobReserve: (id: string) => ["nodes", id, "blob-reserve"] as const,
   catalog: ["catalog"] as const,
   profiles: ["profiles"] as const,
   turn: ["turn-servers"] as const,
@@ -139,6 +140,14 @@ export const runtimeQuery = (id: string) =>
     queryKey: qk.runtime(id),
     queryFn: () => api.nodes.runtime(id),
     refetchInterval: (q) => (q.state.data?.state === "pending" ? RUNTIME_PENDING_MS : REFRESH_MS),
+  });
+
+/** Резерв диска меняется только с отчётом или подбором: опрос реже, чем у деталей ноды. */
+export const blobReserveQuery = (id: string) =>
+  queryOptions({
+    queryKey: qk.blobReserve(id),
+    queryFn: () => api.nodes.blobReserve(id),
+    refetchInterval: 60_000,
   });
 
 export const JOB_POLL_MS = 1_500;

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Database, HardDrive, PhoneCall } from "lucide-react";
+import { Database, Gauge, HardDrive, PhoneCall } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -55,6 +55,7 @@ export function ProvisionForm({
       onChange({ ...values, [k]: e.target.value });
   const def = profiles.find((p) => p.is_default);
   const turnSwitchId = React.useId();
+  const reserveSwitchId = React.useId();
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -182,6 +183,27 @@ export function ProvisionForm({
                 {p}
               </code>
             ))}
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-2 rounded-md border border-line bg-bg-elevated px-3.5 py-3 sm:col-span-2">
+          <div className="flex items-center justify-between gap-4">
+            <label
+              htmlFor={reserveSwitchId}
+              className="flex items-center gap-2 text-sm font-medium text-fg"
+            >
+              <Gauge className="size-4 shrink-0 text-accent" aria-hidden />
+              {t("install.autoBlobReserve")}
+            </label>
+            <Switch
+              id={reserveSwitchId}
+              checked={values.auto_blob_reserve}
+              onCheckedChange={(auto_blob_reserve) => onChange({ ...values, auto_blob_reserve })}
+              aria-describedby={`${reserveSwitchId}-hint`}
+            />
+          </div>
+          <p id={`${reserveSwitchId}-hint`} className="text-xs text-fg-subtle">
+            {t("install.autoBlobReserveHint")}
           </p>
         </div>
 

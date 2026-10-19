@@ -32,6 +32,8 @@ export interface ProvisionFormValues {
   port: string;
   backend: Backend;
   with_turn: boolean;
+  /** По первому отчёту панель уменьшит резерв диска под файлы, если места мало. */
+  auto_blob_reserve: boolean;
   /** "" — the default profile. */
   profile_id: string;
   turn_server_ids: string[];
@@ -44,6 +46,7 @@ export const EMPTY_PROVISION: ProvisionFormValues = {
   port: String(DEFAULT_NODE_PORT),
   backend: "sled",
   with_turn: true,
+  auto_blob_reserve: true,
   profile_id: "",
   turn_server_ids: [],
   labels: "",
@@ -70,6 +73,7 @@ export function provisionPayload(v: ProvisionFormValues): ProvisionInput {
     port: Number(v.port),
     backend: v.backend,
     with_turn: v.with_turn,
+    auto_blob_reserve: v.auto_blob_reserve,
   };
   if (v.profile_id) out.profile_id = v.profile_id;
   if (v.turn_server_ids.length > 0) out.turn_server_ids = v.turn_server_ids;

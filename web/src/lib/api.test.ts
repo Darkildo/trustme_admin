@@ -124,6 +124,40 @@ describe("api client", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
+  it("reads and applies the node blob reserve", async () => {
+    const reserve = {
+      available_bytes: 4_724_464_026,
+      total_bytes: 14_495_514_624,
+      reserve_bytes: 5_368_709_120,
+      suggested_bytes: 1_342_177_280,
+      panel_bytes: null,
+      managed: true,
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, reserve));
+    await expect(api.nodes.blobReserve("01H/X")).resolves.toEqual(reserve);
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { reserve_bytes: 1_342_177_280 }));
+    await expect(api.nodes.applyBlobReserve("01H/X")).resolves.toEqual({
+      reserve_bytes: 1_342_177_280,
+    });
+
+    const [getUrl, getInit] = fetchMock.mock.calls[0]!;
+    expect(getUrl).toBe("/api/v1/nodes/01H%2FX/blob-reserve");
+    expect(getInit.method).toBe("GET");
+    const [postUrl, postInit] = fetchMock.mock.calls[1]!;
+    expect(postUrl).toBe("/api/v1/nodes/01H%2FX/blob-reserve");
+    expect(postInit.method).toBe("POST");
+    expect(postInit.body).toBeUndefined();
+    expect(headersOf(1).get(CSRF_HEADER)).toBe("1");
+  });
+
+  it("surfaces 409 from the blob reserve as a conflict", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(409, { error: { code: "conflict", message: "у ноды нет агента" } }),
+    );
+    const err = (await api.nodes.applyBlobReserve("n1").catch((e: unknown) => e)) as ApiError;
+    expect(err).toMatchObject({ code: "conflict", status: 409, message: "у ноды нет агента" });
+  });
+
   it("unwraps envelopes and returns undefined for 204", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(201, { user: { id: "u1", username: "alice" } }));
     const user = await api.setup.complete({

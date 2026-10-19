@@ -1,5 +1,6 @@
 import type {
   AuditEntry,
+  BlobReserve,
   CreateNodeInput,
   EnrollInfo,
   Job,
@@ -198,6 +199,10 @@ export const api = {
         (r) => r.ingest_token,
       ),
     runtime: (id: string) => request<NodeRuntime>("GET", `/nodes/${enc(id)}/runtime`),
+    blobReserve: (id: string) => request<BlobReserve>("GET", `/nodes/${enc(id)}/blob-reserve`),
+    /** Записать ноде переопределение blob_disk_reserve_bytes = suggested_bytes; 409 — подбирать нечего. */
+    applyBlobReserve: (id: string) =>
+      request<{ reserve_bytes: number }>("POST", `/nodes/${enc(id)}/blob-reserve`),
     provision: (input: ProvisionInput) =>
       request<ProvisionResult>("POST", "/nodes/provision", input),
     enrollToken: (id: string) =>

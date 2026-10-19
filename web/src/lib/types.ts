@@ -329,9 +329,27 @@ export interface ProvisionInput {
   port?: number;
   backend?: Backend;
   with_turn?: boolean;
+  /** По первому отчёту подобрать blob_disk_reserve_bytes, если места меньше резерва (сервер: true). */
+  auto_blob_reserve?: boolean;
   profile_id?: string;
   turn_server_ids?: string[];
   labels?: Record<string, string>;
+}
+
+/** `GET /nodes/{id}/blob-reserve` — резерв диска под файлы: что видит tmnode и что предложит панель. */
+export interface BlobReserve {
+  /** Свободно на томе блобов — из последнего отчёта (`host.blob_reserve`). */
+  available_bytes: number | null;
+  /** Размер диска (`host.disk`). */
+  total_bytes: number | null;
+  /** Резерв, с которым сравнивал tmnode. */
+  reserve_bytes: number | null;
+  /** Что запишет панель; null — подбирать нечего (места хватает, нет отчёта или данных). */
+  suggested_bytes: number | null;
+  /** blob_disk_reserve_bytes в настройках панели для ноды (профиль + переопределение); null — не задано. */
+  panel_bytes: number | null;
+  /** У ноды есть агент tmnode: без него панель настройку не доставит. */
+  managed: boolean;
 }
 
 export interface EnrollInfo {

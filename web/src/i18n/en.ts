@@ -278,6 +278,22 @@ const en: Dictionary = {
     connectMs: "TCP",
     handshakeMs: "Handshake",
   },
+  blobReserve: {
+    cta: "Fit the reserve",
+    applying: "Fitting…",
+    suggested: "The panel will set {{size}}",
+    confirmTitle: "Fit the disk reserve for «{{name}}»?",
+    confirmFromTo: "Reserve: {{from}} → {{to}}",
+    confirmDisk: "Disk {{total}}, {{available}} free.",
+    confirmRule:
+      "The panel takes 10% of the disk (512\u00a0MiB to 5\u00a0GiB), but no more than half of the free space. The node applies it without a restart.",
+    confirm: "Fit",
+    applied: "Disk reserve for «{{name}}»: {{size}}. The node applies it without a restart.",
+    lowered:
+      "The panel has already lowered the reserve to {{panel}} — the node applies it without a restart. The tmnode report still compares against the reserve from the container environment ({{reserve}}), so the warning may stay.",
+    noAgent:
+      "The node has no agent, so the panel cannot deliver the setting. Set the reserve in the node environment:",
+  },
   history: {
     range: "Range",
     r1h: "1 h",
@@ -634,6 +650,9 @@ const en: Dictionary = {
     withTurn: "Install TURN (coturn) alongside",
     withTurnHint:
       "coturn runs on the same server and appears under «Calls» by itself. Open the ports:",
+    autoBlobReserve: "Fit the file disk reserve",
+    autoBlobReserveHint:
+      "If the server is short on space, the panel lowers BLOB_DISK_RESERVE_BYTES after the first report (10% of the disk, up to 5\u00a0GiB). No restart.",
     profile: "Limit profile",
     profileDefault: "Default · {{name}}",
     turnServers: "External TURN servers",
@@ -746,6 +765,7 @@ const en: Dictionary = {
       node_provisioned: "Node prepared",
       node_enroll_token: "Install command issued",
       node_ssh_install: "SSH install",
+      node_blob_reserve: "Disk reserve fitted",
       agent_enrolled: "Agent enrolled",
       profile_created: "Profile created",
       profile_updated: "Profile updated",

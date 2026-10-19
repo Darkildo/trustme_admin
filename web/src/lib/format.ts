@@ -24,7 +24,11 @@ export function formatPercent(share: number | null | undefined, digits = 1): str
   return `${v.toFixed(digits)}%`;
 }
 
-export function formatBytes(bytes: number): string {
+/**
+ * Размер в двоичных единицах: «64 MiB», «1.5 GiB». С `lang` число пишется по правилам языка
+ * и точнее — до двух знаков ниже 10 и одного выше: «1,25 GiB», «13,5 GiB».
+ */
+export function formatBytes(bytes: number, lang?: string): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "—";
   const units = ["B", "KiB", "MiB", "GiB", "TiB"];
   let v = bytes;
@@ -32,6 +36,10 @@ export function formatBytes(bytes: number): string {
   while (v >= 1024 && i < units.length - 1) {
     v /= 1024;
     i++;
+  }
+  if (lang !== undefined) {
+    const digits = i === 0 ? 0 : v >= 10 ? 1 : 2;
+    return `${new Intl.NumberFormat(lang, { maximumFractionDigits: digits }).format(v)} ${units[i]}`;
   }
   return `${v >= 10 || i === 0 ? Math.round(v) : v.toFixed(1)} ${units[i]}`;
 }

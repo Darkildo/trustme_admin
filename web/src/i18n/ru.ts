@@ -275,6 +275,21 @@ const ru = {
     connectMs: "TCP",
     handshakeMs: "Рукопожатие",
   },
+  blobReserve: {
+    cta: "Подобрать резерв",
+    applying: "Подбираем…",
+    suggested: "Панель предложит {{size}}",
+    confirmTitle: "Подобрать резерв диска для «{{name}}»?",
+    confirmFromTo: "Резерв: {{from}} → {{to}}",
+    confirmDisk: "Диск {{total}}, свободно {{available}}.",
+    confirmRule:
+      "Панель берёт 10\u00a0% диска (от 512\u00a0MiB до 5\u00a0GiB), но не больше половины свободного места. Нода применит без перезапуска.",
+    confirm: "Подобрать",
+    applied: "Резерв диска для «{{name}}»: {{size}}. Нода применит без перезапуска.",
+    lowered:
+      "Панель уже уменьшила резерв до {{panel}} — нода применяет его без перезапуска. Отчёт tmnode пока сравнивает с резервом из окружения контейнера ({{reserve}}), поэтому предупреждение может остаться.",
+    noAgent: "У ноды нет агента, панель не доставит ей настройку. Задайте резерв в окружении ноды:",
+  },
   history: {
     range: "Период",
     r1h: "1 ч",
@@ -628,6 +643,9 @@ const ru = {
     backendJetstreamHint: "NATS JetStream в соседнем контейнере — для нагруженных нод",
     withTurn: "Поставить TURN (coturn) рядом",
     withTurnHint: "coturn поднимется на том же сервере и сам появится в «Звонках». Откройте порты:",
+    autoBlobReserve: "Подобрать резерв диска под файлы",
+    autoBlobReserveHint:
+      "Если на сервере мало места, панель по первому отчёту уменьшит BLOB_DISK_RESERVE_BYTES (10\u00a0% диска, до 5\u00a0GiB). Без перезапуска.",
     profile: "Профиль лимитов",
     profileDefault: "По умолчанию · {{name}}",
     turnServers: "Внешние TURN-серверы",
@@ -741,6 +759,7 @@ const ru = {
       node_provisioned: "Нода подготовлена",
       node_enroll_token: "Команда установки выпущена",
       node_ssh_install: "Установка по SSH",
+      node_blob_reserve: "Подобран резерв диска",
       agent_enrolled: "Агент подключён",
       profile_created: "Профиль создан",
       profile_updated: "Профиль изменён",

@@ -10,6 +10,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { motion } from "motion/react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { CheckStatusIcon } from "@/components/StatusBadge";
 import { checkStatusMeta } from "@/lib/status";
@@ -27,7 +28,10 @@ const GROUP_ICONS: Record<CheckGroupKey, LucideIcon> = {
   other: Box,
 };
 
-function CheckRow({ check }: { check: Check }) {
+/** Действие под строкой проверки (кнопка, пометка); null — ничего. */
+export type CheckAction = (check: Check) => ReactNode;
+
+function CheckRow({ check, renderAction }: { check: Check; renderAction?: CheckAction }) {
   const { t } = useTranslation();
   const hasData = check.data && Object.keys(check.data).length > 0;
   return (
@@ -48,6 +52,7 @@ function CheckRow({ check }: { check: Check }) {
           </p>
         </div>
       )}
+      {renderAction?.(check)}
       {hasData && (
         <details className="group ml-7">
           <summary className="flex w-fit cursor-pointer list-none items-center gap-1 rounded-xs text-xs text-fg-subtle hover:text-fg-muted [&::-webkit-details-marker]:hidden">
@@ -66,8 +71,17 @@ function CheckRow({ check }: { check: Check }) {
   );
 }
 
-/** Report checks grouped by id prefix: Конфиг, Рантайм, Ключ, Ресурсы, Сеть (+ Прочее). */
-export function CheckGroups({ checks }: { checks: Check[] }) {
+/**
+ * Report checks grouped by id prefix: Конфиг, Рантайм, Ключ, Ресурсы, Сеть (+ Прочее).
+ * `renderAction` — действие под проверкой (на вкладке «Состояние»; в архивном отчёте его нет).
+ */
+export function CheckGroups({
+  checks,
+  renderAction,
+}: {
+  checks: Check[];
+  renderAction?: CheckAction;
+}) {
   const { t } = useTranslation();
   const groups = groupChecks(checks);
   return (
@@ -112,7 +126,7 @@ export function CheckGroups({ checks }: { checks: Check[] }) {
             </header>
             <ul className="divide-y divide-line">
               {g.checks.map((c) => (
-                <CheckRow key={c.id} check={c} />
+                <CheckRow key={c.id} check={c} renderAction={renderAction} />
               ))}
             </ul>
           </motion.section>

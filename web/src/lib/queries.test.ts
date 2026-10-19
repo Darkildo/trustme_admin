@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  blobReserveQuery,
   JOB_POLL_MS,
   jobQuery,
+  qk,
   RUNTIME_PENDING_MS,
   REFRESH_MS,
   runtimeQuery,
@@ -46,5 +48,11 @@ describe("job polling", () => {
       RUNTIME_PENDING_MS,
     );
     expect(interval({ state: { data: { state: "applied" }, status: "success" } })).toBe(REFRESH_MS);
+  });
+
+  it("keeps the blob reserve under the node key", () => {
+    const key = blobReserveQuery("n").queryKey;
+    expect(key).toEqual(["nodes", "n", "blob-reserve"]);
+    expect(key.slice(0, 2)).toEqual([...qk.node("n")]);
   });
 });

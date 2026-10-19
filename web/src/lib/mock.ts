@@ -10,6 +10,7 @@
 import { formatFingerprint } from "./format";
 import type {
   AuditEntry,
+  BlobReserve,
   Check,
   CheckCounts,
   CheckStatus,
@@ -221,13 +222,18 @@ function baseChecks(): Check[] {
       id: "host.disk",
       status: "ok",
       summary: "Диск /var/lib/trustme: свободно 71%",
-      data: { free_bytes: 152_000_000_000, total_bytes: 214_000_000_000 },
+      data: { available_bytes: 152_000_000_000, total_bytes: 214_000_000_000 },
     },
     { id: "host.memory", status: "ok", summary: "Память: занято 38% из 4 ГиБ" },
     {
       id: "host.blob_reserve",
       status: "ok",
-      summary: "Резерв под блобы: 20 ГиБ из квоты 20 ГиБ доступны",
+      summary: "Свободно 141.6 ГиБ при резерве 5.0 ГиБ",
+      data: {
+        available_bytes: 152_000_000_000,
+        reserve_bytes: 5 * 1024 ** 3,
+        host_path: "/var/lib/trustme/blobs",
+      },
     },
     { id: "host.clock", status: "ok", summary: "Часы синхронизированы (NTP), смещение 4 мс" },
     { id: "endpoint.listen", status: "ok", summary: "Порт 7443/tcp слушается" },
@@ -258,20 +264,26 @@ function patch(checks: Check[], id: string, p: Partial<Check>): Check[] {
   return checks.map((c) => (c.id === id ? { ...c, ...p } : c));
 }
 
+/** Маленький диск fra-edge: свободного места меньше резерва по умолчанию (5 ГиБ). */
+const FRA_DISK = 13.5 * 1024 ** 3;
+const FRA_FREE = 4.4 * 1024 ** 3;
+
 function checksFor(scenario: Scenario, variant: number): Check[] {
   let c = baseChecks();
   if (scenario === "warn") {
     c = patch(c, "host.disk", {
-      status: "warn",
-      summary: "Диск /var/lib/trustme: свободно 6% (11 ГиБ)",
-      hint: "Освободите место или расширьте том: при 2% нода перестанет принимать блобы.",
-      data: { free_bytes: 11_800_000_000, total_bytes: 196_000_000_000, threshold_pct: 10 },
+      summary: "Диск /var/lib/trustme: свободно 33% (4.4 ГиБ из 13.5 ГиБ)",
+      data: { available_bytes: FRA_FREE, total_bytes: FRA_DISK },
     });
     c = patch(c, "host.blob_reserve", {
       status: "warn",
-      summary: "QUOTA блобов (40 ГиБ) больше свободного места на томе (11 ГиБ)",
-      hint: "Уменьшите blobs.quota в node.toml до 8 ГиБ или освободите место на томе.",
-      data: { quota_bytes: 42_949_672_960, free_bytes: 11_800_000_000 },
+      summary: "Свободно 4.4 ГиБ при резерве 5.0 ГиБ: загрузка файлов получает QUOTA",
+      hint: "Уменьшите BLOB_DISK_RESERVE_BYTES или освободите место на томе.",
+      data: {
+        available_bytes: FRA_FREE,
+        reserve_bytes: 5 * 1024 ** 3,
+        host_path: "/var/lib/trustme/blobs",
+      },
     });
     c = patch(
       c,
@@ -308,6 +320,20 @@ function checksFor(scenario: Scenario, variant: number): Check[] {
   }
   if (scenario === "stale") {
     c = patch(c, "runtime.metrics", { status: "skip", summary: "Метрики отключены в конфиге" });
+    // Малина без агента: резерв подобрать нельзя, только подсказка про окружение.
+    c = patch(c, "host.disk", {
+      summary: "Диск /var/lib/trustme: свободно 7% (2.1 ГиБ из 29.7 ГиБ)",
+      data: { available_bytes: 2_254_857_830, total_bytes: 31_890_145_280 },
+    });
+    c = patch(c, "host.blob_reserve", {
+      status: "warn",
+      summary: "Свободно 2.1 ГиБ при резерве 5.0 ГиБ: загрузка файлов получает QUOTA",
+      data: {
+        available_bytes: 2_254_857_830,
+        reserve_bytes: 5 * 1024 ** 3,
+        host_path: "/var/lib/trustme/blobs",
+      },
+    });
   }
   return c;
 }
@@ -931,6 +957,49 @@ function runtimeView(node: MockNode): NodeRuntime {
   };
 }
 
+// ---------- резерв диска под файлы ----------
+
+const RESERVE_STEP = 256 * MIB;
+const RESERVE_MIN = 512 * MIB;
+const RESERVE_MAX = 5 * GIB;
+
+const numOrNull = (v: unknown): number | null => (typeof v === "number" ? v : null);
+
+/**
+ * Как на сервере: 10 % диска в пределах 512 MiB…5 GiB, кратно 256 MiB, и не больше половины
+ * свободного места; меньше 512 MiB — диск почти полон, подбирать нечего.
+ */
+function suggestReserve(available: number, total: number): number | null {
+  let s = Math.floor((total * 0.1) / RESERVE_STEP) * RESERVE_STEP;
+  s = Math.min(Math.max(s, RESERVE_MIN), RESERVE_MAX);
+  s = Math.min(s, Math.floor(available / 2 / RESERVE_STEP) * RESERVE_STEP);
+  return s >= RESERVE_MIN ? s : null;
+}
+
+function blobReserveView(node: MockNode): BlobReserve {
+  const checks = node.reports[0]?.checks ?? [];
+  const check = checks.find((c) => c.id === "host.blob_reserve");
+  const disk = checks.find((c) => c.id === "host.disk");
+  const available = numOrNull(check?.data?.available_bytes);
+  const reserve = numOrNull(check?.data?.reserve_bytes);
+  const total = numOrNull(disk?.data?.total_bytes);
+  const panel = mergedOf(node).blob_disk_reserve_bytes ?? null;
+  let suggested: number | null = null;
+  if (check?.status === "warn" && available !== null && total !== null) {
+    suggested = suggestReserve(available, total);
+    // В панели резерв уже не больше подобранного — подбирать нечего.
+    if (suggested !== null && panel !== null && panel <= suggested) suggested = null;
+  }
+  return {
+    available_bytes: available,
+    total_bytes: total,
+    reserve_bytes: reserve,
+    suggested_bytes: suggested,
+    panel_bytes: panel,
+    managed: node.agent !== null,
+  };
+}
+
 function profileJson(p: MockProfile) {
   const def = defaultProfile();
   return {
@@ -1150,7 +1219,7 @@ function overview(): Overview {
       node_id: fra.id,
       node_name: fra.name,
       kind: "report_problem",
-      summary: "host.blob_reserve: QUOTA блобов больше свободного места",
+      summary: "host.blob_reserve: свободно 4.4 ГиБ при резерве 5.0 ГиБ",
     },
     {
       at: T0 - 6 * 3600,
@@ -1159,7 +1228,7 @@ function overview(): Overview {
       kind: "status_changed",
       from: "ok",
       to: "warn",
-      summary: "host.disk: свободно 6%",
+      summary: "host.memory: занято 91%, swap активен",
     },
     {
       at: T0 - 4 * 3600,
@@ -1551,6 +1620,8 @@ export async function mockFetch(method: string, path: string, rawBody?: string):
     const turnIds = Array.isArray(body.turn_server_ids) ? (body.turn_server_ids as string[]) : [];
     const missing = turnIds.find((id) => !turnServers.some((t) => t.id === id));
     if (missing) return err(400, "invalid_input", `turn_server_ids: сервера ${missing} нет`);
+    if (body.auto_blob_reserve !== undefined && typeof body.auto_blob_reserve !== "boolean")
+      return err(400, "invalid_input", "auto_blob_reserve: true или false");
     const seed = 2000 + nodes.length;
     const n = mkNode(
       seed,
@@ -1578,6 +1649,8 @@ export async function mockFetch(method: string, path: string, rawBody?: string):
       node_id: n.id,
       addr,
       with_turn: body.with_turn === true,
+      // Как на сервере: по умолчанию резерв подбирается по первому отчёту.
+      auto_blob_reserve: body.auto_blob_reserve !== false,
     });
     return json(201, { node_id: n.id, enroll: issueEnroll(n) });
   }
@@ -1621,6 +1694,27 @@ export async function mockFetch(method: string, path: string, rawBody?: string):
       return json(200, { node: detail(node) });
     }
     if (method === "GET" && sub === "/runtime") return json(200, runtimeView(node));
+    if (method === "GET" && sub === "/blob-reserve") return json(200, blobReserveView(node));
+    if (method === "POST" && sub === "/blob-reserve") {
+      if (!isAdmin) return forbidden();
+      if (!node.agent)
+        return err(
+          409,
+          "conflict",
+          "у ноды нет агента: задайте BLOB_DISK_RESERVE_BYTES в окружении ноды",
+        );
+      const view = blobReserveView(node);
+      if (view.suggested_bytes === null)
+        return err(409, "conflict", "резерв подбирать не нужно: свободного места хватает");
+      const before = mergedOf(node);
+      node.overrides = { ...node.overrides, blob_disk_reserve_bytes: view.suggested_bytes };
+      bumpDesired(node, before);
+      addAudit("node.blob_reserve", node.id, {
+        reserve_bytes: view.suggested_bytes,
+        available_bytes: view.available_bytes,
+      });
+      return json(200, { reserve_bytes: view.suggested_bytes });
+    }
     if (method === "POST" && sub === "/enroll-token") {
       if (!isAdmin) return forbidden();
       if (!node.provision)

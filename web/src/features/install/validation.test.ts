@@ -109,6 +109,7 @@ describe("new server form", () => {
       port: 18081,
       backend: "sled",
       with_turn: true,
+      auto_blob_reserve: true,
     });
     expect(
       provisionPayload({
@@ -120,5 +121,12 @@ describe("new server form", () => {
         labels: "env=prod",
       }),
     ).toMatchObject({ profile_id: "p1", turn_server_ids: ["t1"], labels: { env: "prod" } });
+  });
+
+  it("sends the auto blob reserve switch as is", () => {
+    const v = { ...EMPTY_PROVISION, name: "a", public_host: "h" };
+    expect(EMPTY_PROVISION.auto_blob_reserve).toBe(true);
+    expect(provisionPayload({ ...v, auto_blob_reserve: false }).auto_blob_reserve).toBe(false);
+    expect(provisionPayload(v).auto_blob_reserve).toBe(true);
   });
 });
