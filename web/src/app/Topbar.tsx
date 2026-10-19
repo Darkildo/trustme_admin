@@ -30,7 +30,7 @@ export function Topbar() {
   const lang = currentLanguage();
 
   return (
-    <header className="sticky top-0 z-30 flex h-[var(--tm-topbar-h)] items-center gap-2 border-b border-line bg-bg/80 px-3 backdrop-blur-md sm:gap-3 sm:px-5">
+    <header className="sticky top-0 z-30 flex h-[var(--tm-topbar-h)] items-center gap-2 border-b border-line bg-bg/95 px-3 sm:gap-3 sm:px-5">
       <Link to="/" className="rounded-md md:hidden" aria-label="TrustMe Admin">
         <LogoMark />
       </Link>

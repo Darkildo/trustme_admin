@@ -33,7 +33,7 @@ export function SaveBar({
           <div
             role="region"
             aria-label={t("limits.unsaved")}
-            className="flex flex-col gap-3 rounded-lg border border-accent/35 bg-surface-2/95 px-4 py-3 shadow-lg backdrop-blur sm:flex-row sm:items-center"
+            className="flex flex-col gap-3 rounded-lg border border-accent/35 bg-surface-2 px-4 py-3 shadow-lg sm:flex-row sm:items-center"
           >
             <p className="flex items-center gap-2 text-sm text-fg">
               {invalid ? (

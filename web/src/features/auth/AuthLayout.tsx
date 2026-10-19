@@ -53,7 +53,7 @@ export function AuthLayout({
         <div className="mb-8 flex justify-center">
           <Logo />
         </div>
-        <div className="rounded-xl border border-line-strong bg-surface-1/90 p-6 shadow-lg backdrop-blur sm:p-7">
+        <div className="rounded-xl border border-line-strong bg-surface-1/95 p-6 shadow-lg sm:p-7">
           <h1 className="text-xl font-semibold tracking-tight text-fg">{title}</h1>
           {subtitle && <p className="mt-1.5 text-sm text-fg-muted">{subtitle}</p>}
           <div className="mt-6">{children}</div>

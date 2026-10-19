@@ -101,7 +101,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label={t("nav.main")}
-      className="fixed inset-x-0 bottom-0 z-40 flex h-[var(--tm-bottomnav-h)] items-stretch border-t border-line bg-bg-elevated/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 flex h-[var(--tm-bottomnav-h)] items-stretch border-t border-line bg-bg-elevated pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       {primary.map((item) => {
         const Icon = item.icon;
