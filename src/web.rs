@@ -16,7 +16,7 @@ struct Panel;
 
 /// Внешних источников нет: шрифты, иконки и графики — свои. Инлайн-стили
 /// нужны графикам и анимациям.
-const CSP: &str = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; \
+const CSP: &str = "default-src 'self'; img-src 'self'; style-src 'self' 'unsafe-inline'; \
                    font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; \
                    form-action 'self'; frame-ancestors 'none'";
 

@@ -22,6 +22,9 @@ export default defineConfig({
     assetsDir: "assets",
     emptyOutDir: true,
     sourcemap: false,
+    // Ничего не встраивать как data:-URI: CSP сервера (font-src 'self') их режет,
+    // а мелкие подмножества @fontsource иначе попадают в CSS инлайном.
+    assetsInlineLimit: 0,
     chunkSizeWarningLimit: 1200,
   },
   test: {
