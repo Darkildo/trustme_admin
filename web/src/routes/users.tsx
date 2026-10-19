@@ -157,7 +157,17 @@ export function UsersPage() {
   );
 
   const totp = (u: User) => (
-    <span className={cn("text-xs", u.totp_enabled ? "text-ok" : "text-fg-subtle")}>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 text-xs",
+        u.totp_enabled ? "text-ok" : "text-fg-subtle",
+      )}
+    >
+      {u.totp_enabled ? (
+        <ShieldCheck className="size-3.5" aria-hidden />
+      ) : (
+        <ShieldOff className="size-3.5" aria-hidden />
+      )}
       {u.totp_enabled ? t("users.totpOn") : t("users.totpOff")}
     </span>
   );

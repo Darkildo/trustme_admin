@@ -59,7 +59,7 @@ export function Topbar() {
           variant="ghost"
           size="sm"
           onClick={() => setLanguage(lang === "ru" ? "en" : "ru")}
-          aria-label={t("topbar.language")}
+          aria-label={`${t("topbar.language")}: ${lang === "ru" ? "EN" : "RU"}`}
           title={t("topbar.language")}
           className="px-2 font-mono text-xs uppercase"
         >

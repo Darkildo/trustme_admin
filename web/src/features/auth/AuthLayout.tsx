@@ -38,7 +38,7 @@ export function AuthLayout({
           size="sm"
           className="font-mono text-xs uppercase"
           onClick={() => setLanguage(lang === "ru" ? "en" : "ru")}
-          aria-label={t("topbar.language")}
+          aria-label={`${t("topbar.language")}: ${lang === "ru" ? "EN" : "RU"}`}
         >
           <Languages />
           {lang === "ru" ? "en" : "ru"}

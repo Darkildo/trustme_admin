@@ -45,7 +45,7 @@ function hash(n: number): number {
   return ((x ^ (x >>> 16)) >>> 0) / 4294967296;
 }
 
-let idSeq = 0;
+let idSeq = 10_000;
 const CROCK = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 function ulid(seed = ++idSeq): string {
   let s = "01J";

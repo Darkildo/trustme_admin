@@ -35,5 +35,5 @@ export function TabsContent({
   className,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.Content>) {
-  return <TabsPrimitive.Content className={cn("pt-5 outline-none", className)} {...props} />;
+  return <TabsPrimitive.Content className={cn("pt-5", className)} {...props} />;
 }

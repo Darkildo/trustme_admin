@@ -24,14 +24,23 @@ export function Events({ events }: { events: OverviewEvent[] }) {
         <li key={`${e.at}-${e.node_id}-${i}`} className="relative flex gap-3 py-2.5">
           <span className="relative z-10 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-line-strong bg-surface-1">
             {e.kind === "key_changed" ? (
-              <KeyRound className="size-3.5 text-fail" aria-label={t("events.key_changed")} />
+              <KeyRound
+                className="size-3.5 text-fail"
+                role="img"
+                aria-label={t("events.key_changed")}
+              />
             ) : e.kind === "report_problem" ? (
               <TriangleAlert
                 className="size-3.5 text-warn"
+                role="img"
                 aria-label={t("events.report_problem")}
               />
             ) : (
-              <Activity className="size-3.5 text-accent" aria-label={t("events.status_changed")} />
+              <Activity
+                className="size-3.5 text-accent"
+                role="img"
+                aria-label={t("events.status_changed")}
+              />
             )}
           </span>
           <div className="flex min-w-0 flex-1 flex-col gap-1">

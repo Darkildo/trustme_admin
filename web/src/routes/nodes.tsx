@@ -406,6 +406,7 @@ export function NodesPage() {
                             {n.paused && (
                               <Pause
                                 className="size-3.5 text-fg-subtle"
+                                role="img"
                                 aria-label={t("status.paused")}
                               />
                             )}
