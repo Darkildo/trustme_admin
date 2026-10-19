@@ -323,6 +323,13 @@ export function UpdateForm({
           </Field>
         )}
 
+        {want.node && current.node_version === null && (
+          <p className="flex items-start gap-2 rounded-md border border-line bg-bg-elevated px-3 py-2.5 text-sm text-fg-muted">
+            <Info className="mt-0.5 size-4 shrink-0 text-unknown" aria-hidden />
+            {t("updates.dialog.unknownNode", { image: current.node_image ?? "—" })}
+          </p>
+        )}
+
         {want.node && !same.node && (
           <p className="flex items-start gap-2 rounded-md border border-stale/30 bg-stale-soft px-3 py-2.5 text-sm text-fg">
             <Info className="mt-0.5 size-4 shrink-0 text-stale" aria-hidden />

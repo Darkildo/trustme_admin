@@ -183,7 +183,7 @@ interface MockNode {
   enrollPolls: number | null;
   flipAfter: number;
   // ---- обновления ----
-  /** Образ ноды из heartbeat; null — агент до 0.3.0 его не присылает. */
+  /** Образ ноды из heartbeat; null — агент до 0.7.0 его не присылает. */
   nodeImage: string | null;
   /** Задания на обновление, новые первыми. */
   updates: NodeUpdate[];
@@ -1058,7 +1058,7 @@ function runtimeView(node: MockNode): NodeRuntime {
 
 // ---------- ход обновления ----------
 
-const MIN_AGENT = "0.3.0";
+const MIN_AGENT = "0.7.0";
 const UPDATE_WAIT = 4;
 const UPDATE_STEP_SECS = 3;
 
@@ -1308,7 +1308,8 @@ function enrollNode(node: MockNode) {
     live: true,
     last_seen_at: now(),
   };
-  node.nodeImage = `${IMAGE_REPO}:stable`;
+  // Панель ставит ноду с тегом последнего релиза вместо :stable.
+  node.nodeImage = `${IMAGE_REPO}:v${RELEASES.latest}`;
   node.desiredRev++;
   node.desiredAt = now();
   if (node.provision?.with_turn) {

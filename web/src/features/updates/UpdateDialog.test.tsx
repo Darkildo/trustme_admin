@@ -30,7 +30,7 @@ const current = (p: Partial<NodeVersions> = {}): NodeVersions => ({
   node_version: "0.7.0",
   tmnode_version: "0.7.0",
   supports_updates: true,
-  min_agent_version: "0.3.0",
+  min_agent_version: "0.7.0",
   agent_upgrade_command:
     "curl -fsSL https://raw.githubusercontent.com/Darkildo/trustme_backend/stable/deploy/install.sh | sudo sh -s -- agent-upgrade",
   ...p,
@@ -121,6 +121,23 @@ describe("диалог обновления", () => {
     expect(screen.getByRole("button", { name: "Обновить" })).toBeDisabled();
   });
 
+  it("версия ноды неизвестна (:stable) — пояснение, понижение не проверяется", async () => {
+    const user = userEvent.setup();
+    form(
+      RELEASES,
+      current({ node_image: "ghcr.io/darkildo/trustme_backend:stable", node_version: null }),
+    );
+    expect(
+      screen.getByText(/образ ghcr\.io\/darkildo\/trustme_backend:stable без тега версии/),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "Версия" }));
+    await user.click(await screen.findByRole("option", { name: /v0\.6\.0/ }));
+    expect(screen.queryByText(/Откат данных не гарантирован/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Обновить" })).toBeEnabled();
+    await user.click(screen.getByRole("checkbox", { name: /Нода/ }));
+    expect(screen.queryByText(/без тега версии/)).toBeNull();
+  });
+
   it("релизы выключены — версия и хэш вручную", async () => {
     const user = userEvent.setup();
     startUpdate.mockResolvedValue({ id: "u" } as NodeUpdate);
@@ -141,7 +158,7 @@ describe("диалог обновления", () => {
     });
   });
 
-  it("агент до 0.3.0 — вместо кнопки команда agent-upgrade с копированием", () => {
+  it("агент до 0.7.0 — вместо кнопки команда agent-upgrade с копированием", () => {
     renderWithClient(
       <UpdateDialog
         node={NODE}

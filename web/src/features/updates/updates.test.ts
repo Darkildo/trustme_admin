@@ -23,7 +23,7 @@ const current = (p: Partial<NodeVersions> = {}): NodeVersions => ({
   node_version: "0.7.0",
   tmnode_version: "0.7.0",
   supports_updates: true,
-  min_agent_version: "0.3.0",
+  min_agent_version: "0.7.0",
   agent_upgrade_command: "curl … | sudo sh -s -- agent-upgrade",
   ...p,
 });

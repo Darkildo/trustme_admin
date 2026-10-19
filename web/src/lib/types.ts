@@ -287,7 +287,7 @@ export interface AgentInfo {
   hostname: string;
   arch: string;
   tmnode_version: string;
-  /** Образ ноды из последнего heartbeat; null — агент до 0.3.0 его не присылает. */
+  /** Образ ноды из последнего heartbeat; null — агент до 0.7.0 его не присылает. */
   node_image?: string | null;
   enrolled_at: number;
   last_seen_at: number | null;
@@ -447,7 +447,7 @@ export interface NodeVersions {
   /** Тег :vX.Y.Z образа; null — тег без версии (stable) или образа нет. */
   node_version: string | null;
   tmnode_version: string | null;
-  /** Агент 0.3.0+ — умеет обновляться из панели. */
+  /** Агент 0.7.0+ — умеет обновляться из панели. */
   supports_updates: boolean;
   min_agent_version: string;
   agent_upgrade_command: string;

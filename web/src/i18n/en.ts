@@ -349,6 +349,8 @@ const en: Dictionary = {
       unknown: "unknown",
       same: "already installed",
       noTmnode: "the release has no tmnode for {{arch}}",
+      unknownNode:
+        "The current node version is unknown: image {{image}} has no version tag. Downgrades of the node are not checked — it moves to the selected version.",
       restartWarn:
         "The node restarts: clients lose the connection briefly and reconnect on their own within a few seconds.",
       downgradeTitle: "Downgrade",
@@ -380,6 +382,8 @@ const en: Dictionary = {
       meta: "{{user}} · {{ago}}",
       cancel: "Cancel",
       cancelled: "Update cancelled",
+      cancelHint:
+        "Cancelling works until the agent starts. If it has already picked the job up, the cancel may come too late: the agent finishes the update and the result shows up here.",
       text: {
         pending: "The agent picks the job up with its next heartbeat — usually within 30 seconds.",
         running: "Step «{{step}}».",

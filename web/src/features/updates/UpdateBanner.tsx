@@ -94,6 +94,9 @@ export function UpdateBanner({ nodeId, enabled }: { nodeId: string; enabled: boo
             </p>
           </div>
           <UpdateSteps update={update} />
+          {canAdmin && update.state === "pending" && (
+            <p className="text-xs text-fg-subtle">{t("updates.progress.cancelHint")}</p>
+          )}
           {isProblem(update.state) && update.error && (
             <pre className="max-h-40 overflow-auto rounded-md border border-fail/30 bg-surface-1 px-2.5 py-1.5 font-mono text-xs whitespace-pre-wrap [overflow-wrap:anywhere] text-fg">
               {update.error}
@@ -105,6 +108,7 @@ export function UpdateBanner({ nodeId, enabled }: { nodeId: string; enabled: boo
             variant="outline"
             size="sm"
             disabled={cancel.isPending}
+            title={t("updates.progress.cancelHint")}
             onClick={() => cancel.mutate(update.id)}
           >
             {cancel.isPending ? <LoaderCircle className="animate-spin" /> : <Ban />}
