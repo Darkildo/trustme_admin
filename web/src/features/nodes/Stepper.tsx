@@ -17,7 +17,10 @@ export function Stepper({ steps, current }: { steps: string[]; current: number }
         return (
           <li
             key={label}
-            className="flex min-w-0 flex-1 items-center gap-2"
+            className={cn(
+              "flex min-w-0 items-center gap-2",
+              active ? "flex-[2] sm:flex-1" : "flex-1",
+            )}
             aria-current={active ? "step" : undefined}
           >
             <span
@@ -31,7 +34,10 @@ export function Stepper({ steps, current }: { steps: string[]; current: number }
               {done ? <Check className="size-3.5" aria-hidden strokeWidth={3} /> : n}
             </span>
             <span
-              className={cn("truncate text-xs font-medium", active ? "text-fg" : "text-fg-subtle")}
+              className={cn(
+                "truncate text-xs font-medium",
+                active ? "text-fg" : "sr-only text-fg-subtle sm:not-sr-only",
+              )}
             >
               {label}
             </span>

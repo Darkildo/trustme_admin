@@ -26,7 +26,7 @@ function JobStatusPill({ status }: { status: JobStatus }) {
     <span
       data-status={status}
       className={cn(
-        "inline-flex h-6 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium",
+        "inline-flex h-6 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium whitespace-nowrap",
         tone.text,
         tone.bg,
         tone.border,
@@ -80,18 +80,18 @@ export function JobLog({
     <div className="flex flex-col gap-3">
       <div className="overflow-hidden rounded-lg border border-line-strong bg-bg shadow-sm">
         <div className="flex items-center gap-2 border-b border-line bg-surface-1 px-3 py-1.5">
-          <span className="flex gap-1" aria-hidden>
+          <span className="hidden gap-1 sm:flex" aria-hidden>
             <span className="size-2.5 rounded-full bg-fail/70" />
             <span className="size-2.5 rounded-full bg-warn/70" />
             <span className="size-2.5 rounded-full bg-ok/70" />
           </span>
-          <span className="flex items-center gap-1.5 text-xs text-fg-subtle">
-            <Terminal className="size-3.5" aria-hidden />
-            {t("install.job.title")}
+          <span className="flex min-w-0 items-center gap-1.5 text-xs text-fg-subtle">
+            <Terminal className="size-3.5 shrink-0" aria-hidden />
+            <span className="truncate">{t("install.job.title")}</span>
           </span>
-          <span className="ml-auto flex items-center gap-2">
+          <span className="ml-auto flex shrink-0 items-center gap-2">
             {job && (
-              <span className="font-mono text-[11px] text-fg-subtle tabular">
+              <span className="font-mono text-[11px] whitespace-nowrap text-fg-subtle tabular">
                 {Math.round(elapsed)} {t("limits.units.s")}
               </span>
             )}

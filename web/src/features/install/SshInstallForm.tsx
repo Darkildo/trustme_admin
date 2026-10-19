@@ -247,7 +247,8 @@ export function SshInstallForm({
         </p>
       )}
 
-      <div className="flex justify-end">
+      {/* Прилипает к низу DialogBody: форма длиннее диалога, а главное действие должно быть видно. */}
+      <div className="sticky -bottom-4 -mx-5 -mb-4 flex justify-end border-t border-line bg-surface-1 px-5 py-3">
         <Button type="submit" variant="primary" disabled={pending}>
           <TerminalSquare />
           {pending ? t("install.ssh.submitting") : t("install.ssh.submit")}

@@ -56,7 +56,7 @@ export function AvailabilityStrip({
   return (
     <div className="flex flex-col gap-2">
       <div
-        className="flex h-8 items-stretch gap-[2px]"
+        className="flex h-8 min-w-0 items-stretch gap-px sm:gap-[2px]"
         role="img"
         aria-label={t("history.availabilityShare", { share: formatPercent(share) })}
       >
@@ -78,7 +78,7 @@ export function AvailabilityStrip({
               key={i}
               title={title}
               className={cn(
-                "min-w-[2px] flex-1 rounded-[2px] transition-opacity hover:opacity-100",
+                "min-w-0 flex-1 rounded-[1px] sm:rounded-[2px] transition-opacity hover:opacity-100",
                 tone,
                 s.total > 0 && s.ok === s.total ? "opacity-75" : "opacity-95",
               )}
