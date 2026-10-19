@@ -79,6 +79,8 @@ interface Report extends ReportSummary {
 
 interface NodeListItem {
   id: string; name: string; addr: string;
+  provisioning: boolean;         // подготовлена в панели, агент ещё не прислал ключ (node_key = "")
+  agent: { last_seen_at: number | null; hostname: string } | null;
   node_key: string;              // 64 hex
   fingerprint: string;           // "A1B2-C3D4-…" (группы по 4 hex, верхний регистр)
   labels: Record<string, string>;
@@ -261,3 +263,214 @@ interface NodeDetail extends NodeListItem {
 | Вход и учётная запись | `auth.login`, `auth.login_failed`, `auth.logout`, `auth.totp_enabled`, `auth.totp_disabled`, `auth.password_changed` |
 | Настройка и пользователи | `setup.completed`, `user.invited`, `user.activated`, `user.updated`, `user.deleted` |
 | Ноды | `node.created`, `node.updated`, `node.deleted`, `node.token_rotated` |
+
+## Управление нодами (этап 2)
+
+Лимиты, TURN-серверы, новые ноды и агенты `tmnode`. Протокол агента описан
+в trustme_backend, `docs/agent-protocol.md`.
+
+### Каталог лимитов
+
+`GET /catalog` → `{ "settings": Setting[] }`
+
+```ts
+type Scope = "hot" | "new_sessions" | "restart";
+type Group = "messages" | "sessions" | "network" | "blobs" | "security" | "calls";
+type Unit = "count" | "per_second" | "bytes" | "bytes_per_day" | "seconds";
+
+interface Setting {
+  key: string;            // "rate_limit_send_msgs_per_sec"
+  env: string;            // "RATE_LIMIT_SEND_MSGS_PER_SEC"
+  group: Group; unit: Unit; scope: Scope;
+  min: number; max: number;
+  zero_unlimited: boolean; // 0 — «без ограничения»
+  default: number;
+  summary: string;         // одна строка по-русски
+}
+```
+
+Когда изменение вступает в силу (`scope`):
+
+| `scope` | Смысл |
+|---|---|
+| `hot` | сразу |
+| `new_sessions` | для новых соединений |
+| `restart` | после перезапуска ноды; до тех пор настройка числится в `pending_restart` |
+
+### Профили лимитов
+
+```ts
+interface Profile {
+  id: string; name: string;
+  settings: Record<string, number>; // только заданные; остальное — умолчание ноды
+  is_default: boolean;
+  nodes: number;                    // сколько нод на профиле
+  created_at: number; updated_at: number;
+}
+```
+
+Чтение — viewer+, изменение — admin+.
+
+| Запрос | Ответ |
+|---|---|
+| `GET /profiles` | `{ profiles: Profile[] }`, профиль по умолчанию первым |
+| `POST /profiles` `{ name, settings? }` | `201 { profile }` |
+| `PATCH /profiles/{id}` `{ name?, settings? }` | `{ profile }` |
+| `POST /profiles/{id}/default` | `{ profile }` — сделать профилем по умолчанию |
+| `DELETE /profiles/{id}` | `204` |
+
+Ошибки:
+
+- Неизвестная настройка, значение вне пределов, несовместимые значения →
+  `400`, причина в `message`.
+- Имя уже занято (без учёта регистра) → `409`.
+- Профиль по умолчанию удалить нельзя → `409`.
+- Ноды удалённого профиля переходят на профиль по умолчанию.
+
+### TURN-серверы
+
+```ts
+interface TurnServer {
+  id: string; name: string;
+  urls: string[];                   // stun: / stuns: / turn: / turns:
+  has_secret: boolean;              // секрет наружу не отдаётся никогда
+  managed_by_node: { id: string; name: string } | null; // coturn, поставленный с нодой
+  nodes: number;                    // скольким нодам назначен
+  created_at: number;
+}
+```
+
+| Запрос | Ответ |
+|---|---|
+| `GET /turn-servers` | `{ turn_servers: TurnServer[] }` |
+| `POST /turn-servers` `{ name, urls, secret? }` | `201 { turn_server }` |
+| `PATCH /turn-servers/{id}` `{ name?, urls?, secret? }` | `{ turn_server }` |
+| `DELETE /turn-servers/{id}` | `204` |
+
+В `PATCH`: `secret` не передан — секрет остаётся прежним; `""` — снять
+секрет.
+
+Правила, те же, что проверит нода:
+- у `turn:` / `turns:` нужен секрет не короче 16 символов;
+- у STUN секрет не нужен;
+- до 8 URL у одного сервера.
+
+coturn ноды отдельно не удаляется → `409`.
+
+### Лимиты и TURN конкретной ноды
+
+`PATCH /nodes/{id}` дополнительно принимает:
+
+| Поле | Смысл |
+|---|---|
+| `profile_id` | профиль ноды; `""` — профиль по умолчанию |
+| `overrides` | `Record<string, number>` — переопределения поверх профиля; объект целиком, `{}` — убрать все |
+| `turn_server_ids` | `string[]` — список целиком |
+
+`GET /nodes/{id}/runtime` → что задано ноде и что применено (viewer+):
+
+```ts
+{
+  profile: { id: string; name: string };
+  overrides: Record<string, number>;
+  settings: Array<{ key: string; value: number; source: "profile" | "override" }>; // только заданные
+  turn_server_ids: string[];
+  desired_version: string;            // версия желаемого runtime.toml
+  provision: { public_host: string; port: number; backend: "sled" | "jetstream"; with_turn: boolean } | null;
+  agent: { hostname: string; arch: string; tmnode_version: string;
+           enrolled_at: number; last_seen_at: number | null; online: boolean } | null;
+  applied: { result: "applied" | "invalid" | "absent"; version: string | null;
+             error: string | null; pending_restart: string[]; at: number } | null;
+  state: "no_agent" | "pending" | "applied" | "invalid";
+}
+```
+
+`state`:
+- `no_agent` — агента нет (нода добавлена вручную или ещё не
+  установлена). Настройки применяются только через агента;
+- `pending` — агент ещё не применил текущую версию;
+- `applied` — применена;
+- `invalid` — нода отвергла файл, причина в `applied.error`.
+
+### Новая нода
+
+`POST /nodes/provision` (admin+) — подготовить ноду, которую поставит агент:
+
+```ts
+{ name: string; public_host: string;    // IP или имя сервера
+  port?: number;                         // 18081
+  backend?: "sled" | "jetstream";        // sled
+  with_turn?: boolean;                   // поставить coturn рядом с нодой
+  profile_id?: string; turn_server_ids?: string[];
+  labels?: Record<string, string> }
+```
+
+Ответ — `201`:
+
+```ts
+{ node_id: string;
+  enroll: { token: string; expires_at: number;
+            command: string } }  // готовая команда для сервера (сутки, одноразовая)
+```
+
+Нода сразу появляется в списке с `provisioning: true`. После установки
+агент пришлёт её ключ, и нода начнёт проверяться пробами. `coturn`,
+поставленный с нодой, появляется среди TURN-серверов и назначается ей
+автоматически.
+
+`POST /nodes/{id}/enroll-token` (admin+) → `{ enroll }` — новая команда,
+прежняя гаснет. Для ноды, добавленной по адресу и пину, — `409`.
+
+### Установка по SSH
+
+`POST /nodes/{id}/ssh-install` (admin+) — админка один раз подключается к
+серверу и запускает ту же команду установки:
+
+```ts
+{ username: string;
+  password?: string;          // или private_key
+  private_key?: string;       // OpenSSH PEM
+  passphrase?: string;
+  sudo_password?: string;     // если пользователь не root; по умолчанию — пароль входа
+  host?: string;              // по умолчанию public_host ноды
+  port?: number;              // 22
+  host_fingerprint?: string } // "SHA256:…" — сверить ключ хоста
+```
+
+Ответ — `202 { job_id }`.
+
+- Учётные данные не сохраняются ни в базе, ни в журнале; пароль `sudo`
+  идёт через stdin.
+- Без `host_fingerprint` ключ хоста принимается при первом контакте и
+  печатается первой строкой вывода.
+
+`GET /jobs/{id}` → ход установки (опрашивать раз в 1–2 с):
+
+```ts
+{ job: { id: string; node_id: string;
+         status: "running" | "succeeded" | "failed";
+         output: string;           // вывод установки, до 256 КиБ
+         exit_code: number | null; error: string | null;
+         started_at: number; finished_at: number | null } }
+```
+
+Задачи живут в памяти сервера: после перезапуска админки их нет.
+
+### Эндпоинты агента
+
+`POST /agent/enroll` и `POST /agent/heartbeat` — для `tmnode`, не для
+панели. Формат описан в trustme_backend, `docs/agent-protocol.md`; CSRF
+не требуется — авторизация по Bearer-токену.
+
+### Новые действия журнала
+
+| Группа | Действия |
+|---|---|
+| Профили | `profile.created`, `profile.updated`, `profile.made_default`, `profile.deleted` |
+| TURN | `turn.created`, `turn.updated`, `turn.deleted` |
+| Ноды и агенты | `node.provisioned`, `node.enroll_token`, `node.ssh_install`, `agent.enrolled` |
+
+### Новое событие
+
+`kind: "key_changed"` в ленте сводки: агент прислал ключ, отличный от пина
+в панели. Клиенты с прежним пином к ноде не подключатся.

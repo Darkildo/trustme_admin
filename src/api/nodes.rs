@@ -163,7 +163,17 @@ pub async fn list_item(
         now,
     );
     let labels: Value = serde_json::from_str(&row.labels).unwrap_or_else(|_| json!({}));
+    let agent: Option<(Option<i64>, String)> =
+        sqlx::query_as("SELECT last_seen_at, hostname FROM agents WHERE node_id = ?")
+            .bind(&row.id)
+            .fetch_optional(db)
+            .await?;
     Ok(json!({
+        "provisioning": row.node_key.is_empty(),
+        "agent": agent.map(|(last_seen_at, hostname)| json!({
+            "last_seen_at": last_seen_at,
+            "hostname": hostname,
+        })),
         "id": row.id,
         "name": row.name,
         "addr": row.addr,
@@ -282,7 +292,7 @@ pub struct CreateIn {
     probe_interval_secs: Option<i64>,
 }
 
-fn check_name(name: &str) -> ApiResult<String> {
+pub fn check_name(name: &str) -> ApiResult<String> {
     let name = name.trim();
     if name.is_empty() || name.chars().count() > 64 {
         return Err(ApiError::invalid("name: от 1 до 64 символов"));
@@ -427,6 +437,12 @@ pub struct UpdateIn {
     notes: Option<String>,
     probe_interval_secs: Option<i64>,
     paused: Option<bool>,
+    /// Профиль лимитов; пустая строка — профиль по умолчанию.
+    profile_id: Option<String>,
+    /// Переопределения лимитов поверх профиля.
+    overrides: Option<crate::desired::Settings>,
+    /// TURN-серверы ноды целиком.
+    turn_server_ids: Option<Vec<String>>,
 }
 
 pub async fn update(
@@ -471,6 +487,38 @@ pub async fn update(
     if let Some(paused) = input.paused {
         row.paused = paused;
         changed.push("paused");
+    }
+    if let Some(profile_id) = &input.profile_id {
+        let profile = (!profile_id.is_empty()).then_some(profile_id.as_str());
+        if let Some(pid) = profile {
+            let exists: Option<String> =
+                sqlx::query_scalar("SELECT id FROM limit_profiles WHERE id = ?")
+                    .bind(pid)
+                    .fetch_optional(&state.db)
+                    .await?;
+            if exists.is_none() {
+                return Err(ApiError::invalid(format!("profile_id: профиля {pid} нет")));
+            }
+        }
+        sqlx::query("UPDATE nodes SET profile_id = ? WHERE id = ?")
+            .bind(profile)
+            .bind(&id)
+            .execute(&state.db)
+            .await?;
+        changed.push("profile_id");
+    }
+    if let Some(overrides) = &input.overrides {
+        crate::desired::check_settings(overrides).map_err(ApiError::invalid)?;
+        sqlx::query("UPDATE nodes SET overrides = ? WHERE id = ?")
+            .bind(serde_json::to_string(overrides).expect("overrides serialize"))
+            .bind(&id)
+            .execute(&state.db)
+            .await?;
+        changed.push("overrides");
+    }
+    if let Some(ids) = &input.turn_server_ids {
+        super::agents::set_turn_servers(&state, &id, ids).await?;
+        changed.push("turn_server_ids");
     }
     let updated = sqlx::query(
         "UPDATE nodes SET name = ?, addr = ?, node_key = ?, labels = ?, notes = ?,
@@ -543,6 +591,11 @@ pub async fn probe_now(
 ) -> ApiResult<Json<Value>> {
     user.require(Role::Admin)?;
     let row = node_row(&state.db, &id).await?;
+    if row.node_key.is_empty() {
+        return Err(ApiError::conflict(
+            "ключ ноды ещё неизвестен: его сообщит агент после установки",
+        ));
+    }
     let (probe_id, _, _) = run_and_record(
         &state.db,
         state.prober.as_ref(),

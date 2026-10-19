@@ -152,7 +152,7 @@ async fn tick(
     let nodes: Vec<(String, String, String, i64, Option<i64>)> = sqlx::query_as(
         "SELECT n.id, n.addr, n.node_key, n.probe_interval_secs,
                 (SELECT MAX(at) FROM probes p WHERE p.node_id = n.id)
-         FROM nodes n WHERE n.paused = 0",
+         FROM nodes n WHERE n.paused = 0 AND n.node_key != ''",
     )
     .fetch_all(db)
     .await?;

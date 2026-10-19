@@ -21,7 +21,12 @@ pub struct Config {
     pub trust_proxy: bool,
     /// Срок хранения проб, сутки (`TM_ADMIN_PROBE_RETENTION_DAYS`). Default: 14.
     pub probe_retention_days: u64,
+    /// Образ ноды для новых установок (`TM_ADMIN_NODE_IMAGE`).
+    /// Default: `ghcr.io/darkildo/trustme_backend:stable`.
+    pub node_image: String,
 }
+
+pub const DEFAULT_NODE_IMAGE: &str = "ghcr.io/darkildo/trustme_backend:stable";
 
 const USAGE: &str = "\
 trustme-admin — панель управления нодами TrustMe
@@ -29,7 +34,7 @@ trustme-admin — панель управления нодами TrustMe
 Использование: trustme-admin [--listen АДРЕС:ПОРТ] [--data КАТАЛОГ] [--public-url URL] [--trust-proxy]
 
 Переменные окружения: TM_ADMIN_LISTEN, TM_ADMIN_DATA, TM_ADMIN_PUBLIC_URL,
-TM_ADMIN_TRUST_PROXY, TM_ADMIN_PROBE_RETENTION_DAYS, RUST_LOG.
+TM_ADMIN_TRUST_PROXY, TM_ADMIN_PROBE_RETENTION_DAYS, TM_ADMIN_NODE_IMAGE, RUST_LOG.
 ";
 
 pub enum Parsed {
@@ -55,6 +60,7 @@ impl Config {
             .map(|v| v.context("TM_ADMIN_PROBE_RETENTION_DAYS: от 1 до 365"))
             .transpose()?
             .unwrap_or(14);
+        let node_image = env("TM_ADMIN_NODE_IMAGE").unwrap_or_else(|| DEFAULT_NODE_IMAGE.into());
 
         let mut args = args.into_iter();
         while let Some(arg) = args.next() {
@@ -89,6 +95,7 @@ impl Config {
             public_url,
             trust_proxy,
             probe_retention_days,
+            node_image,
         }))
     }
 
@@ -138,6 +145,11 @@ mod tests {
         assert_eq!(c.public_url, "http://127.0.0.1:8088");
         assert!(!c.trust_proxy && !c.secure_cookies());
         assert_eq!(c.probe_retention_days, 14);
+        assert_eq!(c.node_image, DEFAULT_NODE_IMAGE);
+        assert_eq!(
+            run(&[], &[("TM_ADMIN_NODE_IMAGE", "img:1")]).node_image,
+            "img:1"
+        );
     }
 
     #[test]
