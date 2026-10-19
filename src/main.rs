@@ -31,7 +31,8 @@ async fn main() -> Result<()> {
     let secrets = SecretBox::load_or_create(&config.data_dir.join("secret.key"))?;
     let prober: Arc<dyn Prober> = Arc::new(NetProber);
     let state = AppState::new(pool.clone(), secrets, prober.clone())
-        .with_options(config.secure_cookies(), config.trust_proxy);
+        .with_options(config.secure_cookies(), config.trust_proxy)
+        .with_deployment(&config.public_url, &config.node_image);
 
     if let Some(token) = api::ensure_setup_token(&pool).await? {
         // Ссылка одноразовая и живёт сутки: это единственный способ завести

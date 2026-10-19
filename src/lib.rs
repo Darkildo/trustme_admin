@@ -9,8 +9,10 @@ pub mod auth;
 pub mod config;
 pub mod crypto;
 pub mod db;
+pub mod desired;
 pub mod error;
 pub mod probe;
+pub mod ssh;
 pub mod status;
 pub mod web;
 
@@ -50,6 +52,26 @@ pub struct Inner {
     pub secure_cookies: bool,
     /// Брать адрес клиента из `X-Forwarded-For` (админка за прокси).
     pub trust_proxy: bool,
+    /// Адрес админки для агентов: из него строится команда установки.
+    pub public_url: String,
+    /// Образ ноды для новых установок.
+    pub node_image: String,
+    /// Задачи установки по SSH: вывод и итог (только в памяти).
+    pub jobs: Mutex<HashMap<String, Job>>,
+}
+
+/// Задача установки по SSH.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Job {
+    pub id: String,
+    pub node_id: String,
+    /// `running` / `succeeded` / `failed`.
+    pub status: &'static str,
+    pub output: String,
+    pub exit_code: Option<u32>,
+    pub error: Option<String>,
+    pub started_at: u64,
+    pub finished_at: Option<u64>,
 }
 
 impl AppState {
@@ -62,7 +84,17 @@ impl AppState {
             ingest_seen: Mutex::new(HashMap::new()),
             secure_cookies: false,
             trust_proxy: false,
+            public_url: "http://127.0.0.1:8088".into(),
+            node_image: config::DEFAULT_NODE_IMAGE.into(),
+            jobs: Mutex::new(HashMap::new()),
         }))
+    }
+
+    pub fn with_deployment(mut self, public_url: &str, node_image: &str) -> Self {
+        let inner = Arc::get_mut(&mut self.0).expect("options are set before sharing the state");
+        inner.public_url = public_url.to_owned();
+        inner.node_image = node_image.to_owned();
+        self
     }
 
     pub fn with_options(mut self, secure_cookies: bool, trust_proxy: bool) -> Self {

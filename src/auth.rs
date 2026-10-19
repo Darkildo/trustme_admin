@@ -214,7 +214,12 @@ pub async fn csrf_guard(request: Request, next: Next) -> Result<Response, ApiErr
         *request.method(),
         Method::GET | Method::HEAD | Method::OPTIONS
     );
-    let ingest = request.uri().path().ends_with("/ingest/report");
+    // Приём отчётов и агент ходят с Bearer-токеном, без cookie.
+    let path = request.uri().path();
+    // Внутри `nest("/api/v1")` путь уже без префикса.
+    let ingest = path.ends_with("/ingest/report")
+        || path.starts_with("/agent/")
+        || path.starts_with("/api/v1/agent/");
     if mutating
         && !ingest
         && request

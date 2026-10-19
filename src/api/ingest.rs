@@ -100,6 +100,67 @@ fn worst_check(report: &ReportIn) -> Option<String> {
         .map(|c| format!("{}: {}", c.id, c.summary))
 }
 
+/// Сохранить разобранный отчёт ноды: история, событие о новой проблеме,
+/// пересчёт статуса. Общая для приёма по токену и heartbeat агента.
+pub async fn store_report(
+    db: &sqlx::SqlitePool,
+    node_id: &str,
+    report: &ReportIn,
+    now: u64,
+) -> ApiResult<String> {
+    let previous: Option<String> = sqlx::query_scalar(
+        "SELECT status FROM reports WHERE node_id = ? ORDER BY received_at DESC, id DESC LIMIT 1",
+    )
+    .bind(node_id)
+    .fetch_optional(db)
+    .await?;
+
+    let id = new_id();
+    sqlx::query(
+        "INSERT INTO reports (id, node_id, received_at, generated_at, status, counts, tmnode_version, body)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&id)
+    .bind(node_id)
+    .bind(now as i64)
+    .bind(report.generated_at as i64)
+    .bind(&report.status)
+    .bind(serde_json::to_string(&report.counts).expect("counts serialize"))
+    .bind(&report.tmnode_version)
+    .bind(serde_json::to_string(report).expect("report serializes"))
+    .execute(db)
+    .await?;
+    sqlx::query(
+        "DELETE FROM reports WHERE node_id = ? AND id NOT IN (
+             SELECT id FROM reports WHERE node_id = ? ORDER BY received_at DESC, id DESC LIMIT ?
+         )",
+    )
+    .bind(node_id)
+    .bind(node_id)
+    .bind(db::REPORTS_PER_NODE)
+    .execute(db)
+    .await?;
+
+    // Новая проблема в отчёте — событие для ленты, даже если статус ноды не
+    // сменился (например, к сломанной проверке добавилась ещё одна).
+    if matches!(report.status.as_str(), "warn" | "error" | "fail")
+        && previous.as_deref() != Some(report.status.as_str())
+        && let Some(summary) = worst_check(report)
+    {
+        sqlx::query(
+            "INSERT INTO events (id, at, node_id, kind, summary) VALUES (?, ?, ?, 'report_problem', ?)",
+        )
+        .bind(new_id())
+        .bind(now as i64)
+        .bind(node_id)
+        .bind(summary)
+        .execute(db)
+        .await?;
+    }
+    status::refresh(db, node_id, now).await?;
+    Ok(id)
+}
+
 pub async fn report(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -129,56 +190,7 @@ pub async fn report(
     }
 
     let report = parse_report(&body)?;
-    let previous: Option<String> = sqlx::query_scalar(
-        "SELECT status FROM reports WHERE node_id = ? ORDER BY received_at DESC, id DESC LIMIT 1",
-    )
-    .bind(&node_id)
-    .fetch_optional(&state.db)
-    .await?;
-
-    let id = new_id();
-    sqlx::query(
-        "INSERT INTO reports (id, node_id, received_at, generated_at, status, counts, tmnode_version, body)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    )
-    .bind(&id)
-    .bind(&node_id)
-    .bind(now as i64)
-    .bind(report.generated_at as i64)
-    .bind(&report.status)
-    .bind(serde_json::to_string(&report.counts).expect("counts serialize"))
-    .bind(&report.tmnode_version)
-    .bind(serde_json::to_string(&report).expect("report serializes"))
-    .execute(&state.db)
-    .await?;
-    sqlx::query(
-        "DELETE FROM reports WHERE node_id = ? AND id NOT IN (
-             SELECT id FROM reports WHERE node_id = ? ORDER BY received_at DESC, id DESC LIMIT ?
-         )",
-    )
-    .bind(&node_id)
-    .bind(&node_id)
-    .bind(db::REPORTS_PER_NODE)
-    .execute(&state.db)
-    .await?;
-
-    // Новая проблема в отчёте — событие для ленты, даже если статус ноды не
-    // сменился (например, к сломанной проверке добавилась ещё одна).
-    if matches!(report.status.as_str(), "warn" | "error" | "fail")
-        && previous.as_deref() != Some(report.status.as_str())
-        && let Some(summary) = worst_check(&report)
-    {
-        sqlx::query(
-            "INSERT INTO events (id, at, node_id, kind, summary) VALUES (?, ?, ?, 'report_problem', ?)",
-        )
-        .bind(new_id())
-        .bind(now as i64)
-        .bind(&node_id)
-        .bind(summary)
-        .execute(&state.db)
-        .await?;
-    }
-    status::refresh(&state.db, &node_id, now).await?;
+    let id = store_report(&state.db, &node_id, &report, now).await?;
     Ok((StatusCode::ACCEPTED, Json(json!({ "report_id": id }))))
 }
 

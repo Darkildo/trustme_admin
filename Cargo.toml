@@ -18,14 +18,19 @@ serde_json = "1.0.154"
 sha2 = "0.11.1"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros", "json"] }
 subtle = "2.6.1"
+toml = "1"
 tokio = { version = "1.53.3", features = ["full"] }
 totp-rs = { version = "6.0.0", features = ["otpauth", "gen_secret"] }
 tower-http = { version = "0.7.1", features = ["set-header", "limit", "trace"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
-trust_message_tcp = { git = "https://github.com/Darkildo/trustme_backend", rev = "51ae69f", version = "0.5.0" }
+trust_message_tcp = { git = "https://github.com/Darkildo/trustme_backend", rev = "561d5eb" }
+# Протокол агента и каталог лимитов — из тех же исходников, что нода и tmnode.
+tmnode = { git = "https://github.com/Darkildo/trustme_backend", rev = "561d5eb" }
 ulid = "3.0.0"
 zeroize = "1.9.1"
+russh = { version = "0.64", default-features = false, features = ["aws-lc-rs", "rsa"] }
 
 [dev-dependencies]
+rand = "0.10"
 tower = { version = "0.5.3", features = ["util"] }

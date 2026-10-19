@@ -1,8 +1,10 @@
 //! REST API `/api/v1` (docs/api.md).
 
+mod agents;
 mod audit_log;
 mod auth;
 mod ingest;
+mod limits;
 mod nodes;
 mod overview;
 mod setup;
@@ -19,6 +21,7 @@ use serde_json::{Value, json};
 use crate::AppState;
 use crate::error::ApiError;
 
+pub use agents::INSTALL_SCRIPT;
 pub use setup::ensure_setup_token;
 
 /// Предел тела обычного запроса.
@@ -53,6 +56,34 @@ pub fn router(_state: AppState) -> Router<AppState> {
         .route(
             "/ingest/report",
             post(ingest::report).layer(DefaultBodyLimit::max(REPORT_LIMIT)),
+        )
+        .route("/catalog", get(limits::catalog))
+        .route(
+            "/profiles",
+            get(limits::list_profiles).post(limits::create_profile),
+        )
+        .route(
+            "/profiles/{id}",
+            axum::routing::patch(limits::update_profile).delete(limits::delete_profile),
+        )
+        .route("/profiles/{id}/default", post(limits::make_default))
+        .route(
+            "/turn-servers",
+            get(limits::list_turn).post(limits::create_turn),
+        )
+        .route(
+            "/turn-servers/{id}",
+            axum::routing::patch(limits::update_turn).delete(limits::delete_turn),
+        )
+        .route("/nodes/provision", post(agents::provision))
+        .route("/nodes/{id}/enroll-token", post(agents::new_enroll_token))
+        .route("/nodes/{id}/runtime", get(agents::runtime_view))
+        .route("/nodes/{id}/ssh-install", post(agents::ssh_install))
+        .route("/jobs/{id}", get(agents::job))
+        .route("/agent/enroll", post(agents::enroll))
+        .route(
+            "/agent/heartbeat",
+            post(agents::heartbeat).layer(DefaultBodyLimit::max(REPORT_LIMIT)),
         )
         .route("/users", get(users::list).post(users::invite))
         .route(
