@@ -76,7 +76,7 @@ admin.example.org {
 | `TM_ADMIN_PUBLIC_URL` | `--public-url` | `http://<listen>` | адрес в браузере; `https://` включает `Secure` у cookie |
 | `TM_ADMIN_TRUST_PROXY` | `--trust-proxy` | `false` | доверять `X-Forwarded-For` |
 | `TM_ADMIN_PROBE_RETENTION_DAYS` | — | `14` | сколько суток хранить пробы |
-| `TM_ADMIN_NODE_IMAGE` | — | `ghcr.io/darkildo/trustme_backend:stable` | образ ноды для новых установок |
+| `TM_ADMIN_NODE_IMAGE` | — | `ghcr.io/darkildo/trustme_backend:stable` | образ ноды для новых установок; тег без версии панель заменяет тегом последнего релиза |
 | `TM_ADMIN_RELEASES_REPO` | — | `Darkildo/trustme_backend` | релизы для обновления нод (GitHub); `off` — не ходить в GitHub, версии вводятся вручную |
 | `RUST_LOG` | — | `info` | уровень логов |
 
@@ -101,7 +101,9 @@ admin.example.org {
 
 Нода появится в списке со статусом «ожидает установки» и оживёт, когда
 агент пришлёт её ключ. Образ ноды — `TM_ADMIN_NODE_IMAGE` (по умолчанию
-`ghcr.io/darkildo/trustme_backend:stable`).
+`ghcr.io/darkildo/trustme_backend:stable`). Тег без версии панель заменяет
+тегом последнего релиза (`:v0.7.1`), чтобы версия ноды была известна; с
+`TM_ADMIN_RELEASES_REPO=off` образ ставится как есть.
 
 ## Обновление нод
 
@@ -112,7 +114,8 @@ admin.example.org {
 неудаче вернёт прежний контейнер. Клиенты переподключаются за несколько
 секунд.
 
-- Агенту нужен `tmnode` 0.3.0 или новее. Старый агент обновляют на
+- Агенту нужен `tmnode` 0.7.0 или новее (с релиза v0.7.0 версия `tmnode`
+  совпадает с версией релиза бэкенда). Старый агент обновляют на
   сервере: `curl -fsSL …/deploy/install.sh | sudo sh -s -- agent-upgrade`.
 - Нода, добавленная по адресу и пину, обновляется только на сервере.
 - Без доступа к GitHub (`TM_ADMIN_RELEASES_REPO=off`) версию вводят

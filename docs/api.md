@@ -379,7 +379,7 @@ coturn ноды отдельно не удаляется → `409`.
   desired_version: string;            // версия желаемого runtime.toml
   provision: { public_host: string; port: number; backend: "sled" | "jetstream"; with_turn: boolean } | null;
   agent: { hostname: string; arch: string; tmnode_version: string;
-           node_image: string | null;   // образ ноды из heartbeat (агент 0.3.0+)
+           node_image: string | null;   // образ ноды из heartbeat (агент 0.7.0+)
            enrolled_at: number; last_seen_at: number | null; online: boolean } | null;
   applied: { result: "applied" | "invalid" | "absent"; version: string | null;
              error: string | null; pending_restart: string[]; at: number } | null;
@@ -453,7 +453,7 @@ coturn ноды отдельно не удаляется → `409`.
 С `auto_blob_reserve` (по умолчанию) панель делает то же сама, один раз —
 по первому отчёту новой ноды, где видно место под файлы.
 
-`tmnode doctor` до 0.3.0 сравнивает с резервом из окружения контейнера и не
+`tmnode doctor` до 0.7.0 сравнивает с резервом из окружения контейнера и не
 видит `runtime.toml`, поэтому предупреждение в отчёте может остаться и после
 подбора, хотя нода уже работает с новым резервом. Новый `doctor` учитывает
 `runtime.toml` и пишет, откуда взят резерв, в `data.reserve_source` проверки
@@ -542,13 +542,26 @@ coturn ноды отдельно не удаляется → `409`.
 |---|---|
 | `400` | нет ни одной версии; версия не `X.Y.Z`; релизы выключены, а `tmnode_sha256` не задан или не 64 hex |
 | `404` | ноды нет |
-| `409` | нода добавлена по адресу и пину; агент ещё не подключился; агент до 0.3.0 (в `message` — команда `install.sh agent-upgrade`); у ноды уже есть `pending` или `running` задание |
-| `422` | понижение без `allow_downgrade`; релиза с такой версией нет; в релизе нет `tmnode` под архитектуру агента; `tmnode_sha256` не совпал с `SHA256SUMS`; `tmnode` ниже 0.3.0 (такой агент заданий не знает) |
+| `409` | нода добавлена по адресу и пину; агент ещё не подключился; агент до 0.7.0 (в `message` — команда `install.sh agent-upgrade`); у ноды уже есть `pending` или `running` задание |
+| `422` | понижение без `allow_downgrade`; релиза с такой версией нет; в релизе нет `tmnode` под архитектуру агента; `tmnode_sha256` не совпал с `SHA256SUMS`; `tmnode` ниже 0.7.0 (такой агент заданий не знает) |
 | `503` | GitHub не ответил |
 
 Текущие версии для проверки понижения: нода — по тегу `:vX.Y.Z` образа,
-`tmnode` — по версии агента. Если тег без версии (`:stable`), понижение
-проверяет только агент.
+`tmnode` — по версии агента. Если тег без версии (`:stable`), задание не
+блокируется: «доступно обновление» и понижение для ноды не вычисляются
+(панель предупреждает об этом в диалоге), понижение проверяет только агент.
+Задание только на `tmnode` агент выполняет и для ноды на `:stable`.
+
+С релиза v0.7.0 версия `tmnode` совпадает с версией релиза бэкенда:
+`tmnode_version` — это и версия бинаря, и тег релиза, откуда агент его
+качает. Обновляться из панели умеет `tmnode` 0.7.0 и новее; агенты 0.2.x
+нумеровались по-своему и ниже порога.
+
+**Образ новой установки.** Если в `TM_ADMIN_NODE_IMAGE` тег без версии (по
+умолчанию `:stable`), `POST /agent/enroll` отдаёт в `install.image` тот же
+репозиторий с тегом последнего релиза (`:v0.7.1`): тогда версия ноды видна
+с первого heartbeat. Версионный тег в настройке, выключенные или недоступные
+релизы — образ из настройки как есть.
 
 **Версии и история** — `GET /nodes/{id}/updates` (viewer+):
 
@@ -582,8 +595,8 @@ interface NodeUpdate {
     node_image_source: "agent" | "report" | null;
     node_version: string | null;   // тег :vX.Y.Z образа; null — тег без версии
     tmnode_version: string | null;
-    supports_updates: boolean;     // есть агент 0.3.0 или новее
-    min_agent_version: string;     // "0.3.0"
+    supports_updates: boolean;     // есть агент 0.7.0 или новее
+    min_agent_version: string;     // "0.7.0"
     agent_upgrade_command: string  // curl … install.sh | sudo sh -s -- agent-upgrade
   };
   updates: NodeUpdate[] }      // новые первыми, до 50
@@ -610,9 +623,13 @@ interface NodeUpdate {
 
 **Отмена** — `POST /nodes/{id}/updates/{uid}/cancel` (admin+) →
 `{ update: NodeUpdate }`. Только `pending`; `409`, если агент уже начал
-или задание завершено.
+или задание завершено. Отменить у самого агента нельзя: если он забрал
+задание в ответе heartbeat и начал раньше, чем пришла отмена, он доведёт
+обновление, а его итог запишется поверх `cancelled`. Панель говорит об этом
+в подсказке у кнопки «Отменить».
 
-**Агент до 0.3.0** заданий не видит. Его обновляют на сервере:
+**Агент до 0.7.0** заданий не видит (агенты 0.2.x нумеровались отдельно от
+релизов; с v0.7.0 версия `tmnode` совпадает с версией релиза бэкенда). Его обновляют на сервере:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Darkildo/trustme_backend/stable/deploy/install.sh \
