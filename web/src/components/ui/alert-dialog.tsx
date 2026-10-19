@@ -12,7 +12,7 @@ export function AlertDialogContent({
 }: React.ComponentProps<typeof AD.Content>) {
   return (
     <AD.Portal>
-      <AD.Overlay className="animate-fade-in fixed inset-0 z-50 bg-overlay backdrop-blur-[2px]" />
+      <AD.Overlay className="animate-fade-in fixed inset-0 z-50 bg-overlay" />
       <AD.Content
         className={cn(
           "animate-dialog-in fixed top-1/2 left-1/2 z-50 flex w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-xl border border-line-strong bg-surface-1 p-5 shadow-lg outline-none",

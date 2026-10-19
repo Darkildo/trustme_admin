@@ -42,7 +42,7 @@ export function CommandPalette({
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="animate-fade-in fixed inset-0 z-50 bg-overlay backdrop-blur-[2px]" />
+        <DialogPrimitive.Overlay className="animate-fade-in fixed inset-0 z-50 bg-overlay" />
         <DialogPrimitive.Content className="animate-dialog-in fixed top-[12vh] left-1/2 z-50 w-[calc(100vw-2rem)] max-w-xl -translate-x-1/2 overflow-hidden rounded-xl border border-line-strong bg-surface-1 shadow-lg outline-none">
           <DialogPrimitive.Title className="sr-only">{t("palette.title")}</DialogPrimitive.Title>
           <Command label={t("palette.title")} loop>
