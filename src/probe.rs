@@ -181,7 +181,8 @@ async fn tick(
     Ok(())
 }
 
-/// Раз в час: чистка истории и пересчёт статусов (отчёт мог устареть).
+/// Раз в час: чистка истории, пересчёт статусов (отчёт мог устареть) и
+/// потерянные обновления нод.
 pub fn spawn_housekeeping(
     db: SqlitePool,
     probe_retention_days: u64,
@@ -196,6 +197,9 @@ pub fn spawn_housekeeping(
             }
             if let Err(err) = status::refresh_all(&db, now).await {
                 tracing::warn!(error = %err, "status refresh failed");
+            }
+            if let Err(err) = crate::api::mark_lost(&db, now).await {
+                tracing::warn!(error = %err, "lost update check failed");
             }
         }
     })

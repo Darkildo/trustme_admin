@@ -433,6 +433,7 @@ pub async fn heartbeat(
     Ok(Json(HeartbeatResponse {
         interval_secs: DEFAULT_INTERVAL_SECS,
         runtime: Some(desired::desired(&state.db, &state.secrets, &node_id).await?),
+        update: None,
     }))
 }
 
