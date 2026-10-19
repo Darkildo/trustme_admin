@@ -1,6 +1,17 @@
 import type {
   AuditEntry,
   CreateNodeInput,
+  EnrollInfo,
+  Job,
+  NodeRuntime,
+  Profile,
+  ProfileInput,
+  ProvisionInput,
+  ProvisionResult,
+  Setting,
+  SshInstallInput,
+  TurnServer,
+  TurnServerInput,
   CreateNodeResult,
   CreateUserResult,
   ErrorBody,
@@ -186,6 +197,48 @@ export const api = {
       request<{ ingest_token: string }>("POST", `/nodes/${enc(id)}/ingest-token`).then(
         (r) => r.ingest_token,
       ),
+    runtime: (id: string) => request<NodeRuntime>("GET", `/nodes/${enc(id)}/runtime`),
+    provision: (input: ProvisionInput) =>
+      request<ProvisionResult>("POST", "/nodes/provision", input),
+    enrollToken: (id: string) =>
+      request<{ enroll: EnrollInfo }>("POST", `/nodes/${enc(id)}/enroll-token`).then(
+        (r) => r.enroll,
+      ),
+    sshInstall: (id: string, input: SshInstallInput) =>
+      request<{ job_id: string }>("POST", `/nodes/${enc(id)}/ssh-install`, input).then(
+        (r) => r.job_id,
+      ),
+  },
+
+  jobs: {
+    get: (id: string) => request<{ job: Job }>("GET", `/jobs/${enc(id)}`).then((r) => r.job),
+  },
+
+  catalog: () => request<{ settings: Setting[] }>("GET", "/catalog").then((r) => r.settings),
+
+  profiles: {
+    list: () => request<{ profiles: Profile[] }>("GET", "/profiles").then((r) => r.profiles),
+    create: (input: { name: string; settings?: Record<string, number> }) =>
+      request<{ profile: Profile }>("POST", "/profiles", input).then((r) => r.profile),
+    update: (id: string, input: ProfileInput) =>
+      request<{ profile: Profile }>("PATCH", `/profiles/${enc(id)}`, input).then((r) => r.profile),
+    makeDefault: (id: string) =>
+      request<{ profile: Profile }>("POST", `/profiles/${enc(id)}/default`).then((r) => r.profile),
+    remove: (id: string) => request<void>("DELETE", `/profiles/${enc(id)}`),
+  },
+
+  turn: {
+    list: () =>
+      request<{ turn_servers: TurnServer[] }>("GET", "/turn-servers").then((r) => r.turn_servers),
+    create: (input: { name: string; urls: string[]; secret?: string }) =>
+      request<{ turn_server: TurnServer }>("POST", "/turn-servers", input).then(
+        (r) => r.turn_server,
+      ),
+    update: (id: string, input: TurnServerInput) =>
+      request<{ turn_server: TurnServer }>("PATCH", `/turn-servers/${enc(id)}`, input).then(
+        (r) => r.turn_server,
+      ),
+    remove: (id: string) => request<void>("DELETE", `/turn-servers/${enc(id)}`),
   },
 
   users: {

@@ -1,4 +1,4 @@
-import { CircleCheck, CircleX, Plus, TriangleAlert, CircleHelp } from "lucide-react";
+import { CircleCheck, CircleX, Hourglass, Plus, TriangleAlert, CircleHelp } from "lucide-react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { useCan } from "@/app/useCurrentUser";
@@ -12,7 +12,16 @@ import type { Overview } from "@/lib/types";
 import { useNow } from "@/lib/useNow";
 import { cn } from "@/lib/utils";
 
-export function Hero({ data, updatedAt }: { data: Overview; updatedAt: number }) {
+export function Hero({
+  data,
+  updatedAt,
+  provisioning = 0,
+}: {
+  data: Overview;
+  updatedAt: number;
+  /** Nodes awaiting installation (reported as `unknown` by the server). */
+  provisioning?: number;
+}) {
   const { t, i18n } = useTranslation();
   const canAdd = useCan("admin");
   const { openAddNode } = useUi();
@@ -22,7 +31,7 @@ export function Hero({ data, updatedAt }: { data: Overview; updatedAt: number })
   const ok = s.ok ?? 0;
   const attention = (s.warn ?? 0) + (s.stale ?? 0);
   const fail = s.fail ?? 0;
-  const unknown = s.unknown ?? 0;
+  const unknown = Math.max(0, (s.unknown ?? 0) - provisioning);
   const overall: Tone =
     fail > 0 ? "fail" : attention > 0 ? "warn" : unknown > 0 && ok === 0 ? "unknown" : "ok";
   const headline =
@@ -32,22 +41,44 @@ export function Hero({ data, updatedAt }: { data: Overview; updatedAt: number })
         ? t("overview.someAttention")
         : t("overview.allGood");
 
-  const parts: Array<{ tone: Tone; icon: typeof CircleCheck; text: string; n: number }> = [
-    { tone: "ok", icon: CircleCheck, text: t("overview.ok", { count: ok }), n: ok },
+  const parts: Array<{
+    key: string;
+    tone: Tone;
+    icon: typeof CircleCheck;
+    text: string;
+    n: number;
+  }> = [
+    { key: "ok", tone: "ok", icon: CircleCheck, text: t("overview.ok", { count: ok }), n: ok },
     {
+      key: "warn",
       tone: "warn",
       icon: TriangleAlert,
       text: t("overview.attention", { count: attention }),
       n: attention,
     },
-    { tone: "fail", icon: CircleX, text: t("overview.fail", { count: fail }), n: fail },
+    {
+      key: "fail",
+      tone: "fail",
+      icon: CircleX,
+      text: t("overview.fail", { count: fail }),
+      n: fail,
+    },
   ];
   if (unknown > 0)
     parts.push({
+      key: "unknown",
       tone: "unknown",
       icon: CircleHelp,
       text: t("overview.unknown", { count: unknown }),
       n: unknown,
+    });
+  if (provisioning > 0)
+    parts.push({
+      key: "provisioning",
+      tone: "unknown",
+      icon: Hourglass,
+      text: t("overview.provisioning", { count: provisioning }),
+      n: provisioning,
     });
 
   return (
@@ -91,7 +122,7 @@ export function Hero({ data, updatedAt }: { data: Overview; updatedAt: number })
             {parts.map((p, i) => {
               const Icon = p.icon;
               return (
-                <li key={p.tone} className="flex items-center gap-1">
+                <li key={p.key} className="flex items-center gap-1">
                   {i > 0 && (
                     <span aria-hidden className="mx-1.5 hidden text-fg-subtle sm:inline">
                       ·

@@ -2,11 +2,18 @@ import { nodeStatusRank } from "@/lib/status";
 import type { NodeListItem, NodeStatus } from "@/lib/types";
 
 export type SortKey = "status" | "name" | "latency" | "uptime" | "report";
+
+/** Status as the list shows it: provisioning nodes get their own bucket instead of `unknown`. */
+export type ListStatus = NodeStatus | "provisioning";
+
+export function listStatus(n: Pick<NodeListItem, "status" | "provisioning">): ListStatus {
+  return n.provisioning ? "provisioning" : n.status;
+}
 export type SortDir = "asc" | "desc";
 
 export interface NodeFilter {
   text: string;
-  statuses: NodeStatus[];
+  statuses: ListStatus[];
   /** "key=value" or "" for all. */
   label: string;
 }
@@ -20,7 +27,7 @@ export function allLabels(nodes: NodeListItem[]): string[] {
 export function filterNodes(nodes: NodeListItem[], f: NodeFilter): NodeListItem[] {
   const text = f.text.trim().toLowerCase();
   return nodes.filter((n) => {
-    if (f.statuses.length > 0 && !f.statuses.includes(n.status)) return false;
+    if (f.statuses.length > 0 && !f.statuses.includes(listStatus(n))) return false;
     if (f.label) {
       const eq = f.label.indexOf("=");
       const k = f.label.slice(0, eq);
@@ -46,7 +53,8 @@ export function filterNodes(nodes: NodeListItem[], f: NodeFilter): NodeListItem[
 function sortValue(n: NodeListItem, key: SortKey): number | string {
   switch (key) {
     case "status":
-      return nodeStatusRank(n.status);
+      // Awaiting install sorts right after «no data».
+      return n.provisioning ? nodeStatusRank("unknown") + 0.5 : nodeStatusRank(n.status);
     case "name":
       return n.name.toLowerCase();
     case "latency":

@@ -5,10 +5,13 @@ import {
   ArrowUp,
   ArrowUpDown,
   FilterX,
+  Hourglass,
+  KeyRound,
   Pause,
   Plus,
   Search,
   Server,
+  Terminal,
 } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -17,8 +20,9 @@ import { useCan } from "@/app/useCurrentUser";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
 import { PageHeader } from "@/components/PageHeader";
+import { AgentDot, NodeStatusBadge } from "@/components/NodeBadges";
 import { PinChip } from "@/components/PinChip";
-import { CheckStatusIcon, StatusBadge } from "@/components/StatusBadge";
+import { CheckStatusIcon } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -32,7 +36,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   allLabels,
   filterNodes,
+  listStatus,
   sortNodes,
+  type ListStatus,
   type SortDir,
   type SortKey,
 } from "@/features/nodes/list";
@@ -40,7 +46,7 @@ import { formatMs, formatPercent, formatRelative } from "@/lib/format";
 import { nodesQuery } from "@/lib/queries";
 import { NODE_STATUS_ORDER, nodeStatusMeta } from "@/lib/status";
 import { TONE_CLASSES } from "@/lib/tone";
-import type { NodeListItem, NodeStatus } from "@/lib/types";
+import type { NodeListItem } from "@/lib/types";
 import { useNow } from "@/lib/useNow";
 import { cn } from "@/lib/utils";
 
@@ -78,8 +84,37 @@ function UptimeBar({ value }: { value: number | null }) {
   );
 }
 
+function PinCell({ node }: { node: NodeListItem }) {
+  const { t } = useTranslation();
+  if (node.provisioning)
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-fg-subtle">
+        <KeyRound className="size-3.5" aria-hidden />
+        {t("node.pinPending")}
+      </span>
+    );
+  return <PinChip nodeKey={node.node_key} fingerprint={node.fingerprint} />;
+}
+
 function ReportCell({ node, now }: { node: NodeListItem; now: number }) {
   const { t, i18n } = useTranslation();
+  const canAdmin = useCan("admin");
+  const { openInstall } = useUi();
+  if (node.provisioning && canAdmin)
+    return (
+      <Button
+        variant="secondary"
+        size="sm"
+        className="relative z-10 h-7"
+        onClick={(e) => {
+          e.stopPropagation();
+          openInstall({ id: node.id, name: node.name, addr: node.addr });
+        }}
+      >
+        <Terminal />
+        {t("node.install")}
+      </Button>
+    );
   if (!node.last_report)
     return <span className="text-xs text-fg-subtle">{t("nodes.noReport")}</span>;
   return (
@@ -139,7 +174,7 @@ export function NodesPage() {
   const now = useNow(30_000);
 
   const [text, setText] = React.useState("");
-  const [statuses, setStatuses] = React.useState<NodeStatus[]>([]);
+  const [statuses, setStatuses] = React.useState<ListStatus[]>([]);
   const [label, setLabel] = React.useState("");
   const [sort, setSort] = React.useState<{ key: SortKey; dir: SortDir }>({
     key: "status",
@@ -160,7 +195,7 @@ export function NodesPage() {
         ? { key, dir: s.dir === "asc" ? "desc" : "asc" }
         : { key, dir: key === "name" ? "asc" : "desc" },
     );
-  const toggleStatus = (s: NodeStatus) =>
+  const toggleStatus = (s: ListStatus) =>
     setStatuses((list) => (list.includes(s) ? list.filter((x) => x !== s) : [...list, s]));
   const clear = () => {
     setText("");
@@ -176,10 +211,18 @@ export function NodesPage() {
   );
 
   const counts = React.useMemo(() => {
-    const c: Record<NodeStatus, number> = { ok: 0, unknown: 0, warn: 0, stale: 0, fail: 0 };
-    for (const n of nodes) c[n.status]++;
+    const c: Record<ListStatus, number> = {
+      ok: 0,
+      unknown: 0,
+      warn: 0,
+      stale: 0,
+      fail: 0,
+      provisioning: 0,
+    };
+    for (const n of nodes) c[listStatus(n)]++;
     return c;
   }, [nodes]);
+  const nowSec = now / 1000;
 
   return (
     <div className="flex flex-col gap-5">
@@ -275,6 +318,23 @@ export function NodesPage() {
                     </button>
                   );
                 })}
+              {counts.provisioning > 0 && (
+                <button
+                  type="button"
+                  aria-pressed={statuses.includes("provisioning")}
+                  onClick={() => toggleStatus("provisioning")}
+                  className={cn(
+                    "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors",
+                    statuses.includes("provisioning")
+                      ? "border-accent-2/40 bg-accent-2/10 text-accent-2"
+                      : "border-line bg-surface-1 text-fg-muted hover:border-line-strong hover:text-fg",
+                  )}
+                >
+                  <Hourglass className="size-3.5 text-accent-2" aria-hidden />
+                  {t("status.provisioning")}
+                  <span className="font-mono tabular opacity-70">{counts.provisioning}</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -342,7 +402,7 @@ export function NodesPage() {
                       >
                         <td className="py-3 pr-3 pl-4">
                           <span className="flex items-center gap-1.5">
-                            <StatusBadge status={n.status} size="sm" />
+                            <NodeStatusBadge node={n} size="sm" />
                             {n.paused && (
                               <Pause
                                 className="size-3.5 text-fg-subtle"
@@ -353,14 +413,17 @@ export function NodesPage() {
                         </td>
                         <td className="px-3 py-3">
                           <div className="flex flex-col gap-1">
-                            <Link
-                              to="/nodes/$id"
-                              params={{ id: n.id }}
-                              onClick={(e) => e.stopPropagation()}
-                              className="w-fit font-medium text-fg group-hover:text-accent"
-                            >
-                              {n.name}
-                            </Link>
+                            <span className="flex items-center gap-1.5">
+                              <Link
+                                to="/nodes/$id"
+                                params={{ id: n.id }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-fit font-medium text-fg group-hover:text-accent"
+                              >
+                                {n.name}
+                              </Link>
+                              <AgentDot node={n} nowSec={nowSec} />
+                            </span>
                             <Labels labels={n.labels} />
                           </div>
                         </td>
@@ -368,7 +431,7 @@ export function NodesPage() {
                           {n.addr}
                         </td>
                         <td className="px-3 py-3">
-                          <PinChip nodeKey={n.node_key} fingerprint={n.fingerprint} />
+                          <PinCell node={n} />
                         </td>
                         <td className="px-3 py-3 text-right font-mono text-[13px] text-fg tabular">
                           {formatMs(n.last_probe?.handshake_ms)}
@@ -393,19 +456,24 @@ export function NodesPage() {
                     className="relative rounded-lg border border-line bg-surface-1 p-3.5"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <Link
-                        to="/nodes/$id"
-                        params={{ id: n.id }}
-                        className="font-medium text-fg after:absolute after:inset-0 after:content-['']"
-                      >
-                        {n.name}
-                      </Link>
-                      <StatusBadge status={n.status} size="sm" />
+                      <span className="flex items-center gap-1.5">
+                        <Link
+                          to="/nodes/$id"
+                          params={{ id: n.id }}
+                          className="font-medium text-fg after:absolute after:inset-0 after:content-['']"
+                        >
+                          {n.name}
+                        </Link>
+                        <span className="relative z-10">
+                          <AgentDot node={n} nowSec={nowSec} />
+                        </span>
+                      </span>
+                      <NodeStatusBadge node={n} size="sm" />
                     </div>
                     <p className="mt-1 font-mono text-xs break-all text-fg-muted">{n.addr}</p>
                     <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2">
                       <span className="relative z-10">
-                        <PinChip nodeKey={n.node_key} fingerprint={n.fingerprint} />
+                        <PinCell node={n} />
                       </span>
                       <span className="font-mono text-xs text-fg tabular">
                         {formatMs(n.last_probe?.handshake_ms)}

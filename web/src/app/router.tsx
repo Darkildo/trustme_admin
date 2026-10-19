@@ -15,11 +15,13 @@ import { AppShell } from "./AppShell";
 import {
   AuditPage,
   InvitePage,
+  LimitsPage,
   LoginPage,
   NodePage,
   RootComponent,
   SettingsPage,
   SetupPage,
+  TurnPage,
   UsersPage,
 } from "./pages";
 import { FullPageLoader, NotFound, RouteError } from "./RouteStates";
@@ -138,6 +140,30 @@ const nodeRoute = createRoute({
   },
 });
 
+const limitsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/limits",
+  validateSearch: (s: Record<string, unknown>): { profile?: string } => ({
+    profile: str(s.profile),
+  }),
+  component: function LimitsRoute() {
+    const { profile } = limitsRoute.useSearch();
+    const navigate = limitsRoute.useNavigate();
+    return (
+      <LimitsPage
+        selected={profile}
+        onSelect={(id) => void navigate({ search: { profile: id }, replace: true })}
+      />
+    );
+  },
+});
+
+const turnRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/turn",
+  component: TurnPage,
+});
+
 const auditRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/audit",
@@ -166,6 +192,8 @@ const routeTree = rootRoute.addChildren([
     overviewRoute,
     nodesRoute,
     nodeRoute,
+    limitsRoute,
+    turnRoute,
     auditRoute,
     usersRoute,
     settingsRoute,

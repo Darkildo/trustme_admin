@@ -98,7 +98,9 @@ export function SettingsTab({ node }: { node: NodeDetail }) {
     if (!isValidName(form.name)) errs.name = t("validation.name");
     if (!isValidAddr(form.addr.trim())) errs.addr = t("validation.addr");
     const key = normalizeNodeKey(form.node_key);
-    if (!isValidNodeKey(key)) errs.node_key = t("validation.nodeKey");
+    // A provisioned node gets its key from the agent; an empty key may stay empty.
+    const keyPending = node.provisioning && key === "" && node.node_key === "";
+    if (!keyPending && !isValidNodeKey(key)) errs.node_key = t("validation.nodeKey");
     const labels = parseLabels(form.labels);
     if (!labels.ok) errs.labels = t("validation.labels");
     const interval = Number(form.interval);
@@ -166,6 +168,7 @@ export function SettingsTab({ node }: { node: NodeDetail }) {
               {({ id, describedBy, invalid }) => (
                 <Input
                   id={id}
+                  placeholder={node.provisioning ? t("node.pinPending") : undefined}
                   className="font-mono text-[13px]"
                   spellCheck={false}
                   value={form.node_key}

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Activity, History, Plug, Server, Settings2 } from "lucide-react";
+import { Activity, History, Plug, Server, Settings2, SlidersHorizontal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConnectTab } from "@/features/nodes/ConnectTab";
 import { HistoryTab } from "@/features/nodes/HistoryTab";
+import { LimitsTab } from "@/features/nodes/LimitsTab";
 import { NodeHeader } from "@/features/nodes/NodeHeader";
 import { SettingsTab } from "@/features/nodes/SettingsTab";
 import { StateTab } from "@/features/nodes/StateTab";
@@ -77,6 +78,10 @@ export function NodePage({
             <Plug aria-hidden />
             {t("node.tabs.connect")}
           </TabsTrigger>
+          <TabsTrigger value="limits">
+            <SlidersHorizontal aria-hidden />
+            {t("node.tabs.limits")}
+          </TabsTrigger>
           <TabsTrigger value="settings">
             <Settings2 aria-hidden />
             {t("node.tabs.settings")}
@@ -90,6 +95,9 @@ export function NodePage({
         </TabsContent>
         <TabsContent value="connect">
           <ConnectTab node={node} />
+        </TabsContent>
+        <TabsContent value="limits">
+          <LimitsTab node={node} />
         </TabsContent>
         <TabsContent value="settings">
           <SettingsTab key={node.updated_at} node={node} />

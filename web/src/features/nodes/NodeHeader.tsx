@@ -1,11 +1,22 @@
 import type * as React from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, Check, Pause, RefreshCw, ShieldCheck, X, Zap } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  KeyRound,
+  Pause,
+  RefreshCw,
+  ShieldCheck,
+  Terminal,
+  X,
+  Zap,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useUi } from "@/app/ui-context";
 import { useCan } from "@/app/useCurrentUser";
 import { CopyButton } from "@/components/CopyButton";
+import { AgentDot, NodeStatusBadge } from "@/components/NodeBadges";
 import { PinChip } from "@/components/PinChip";
-import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { formatBytes, formatDateTime, formatMs, formatRelative } from "@/lib/format";
 import { nodeStatusMeta } from "@/lib/status";
@@ -40,9 +51,10 @@ export function NodeHeader({ node }: { node: NodeDetail }) {
   const { t, i18n } = useTranslation();
   const canProbe = useCan("admin");
   const probe = useProbeNow();
+  const { openInstall } = useUi();
   const now = useNow(15_000) / 1000;
   const cfg = node.last_probe?.config ?? null;
-  const tone = nodeStatusMeta(node.status).tone;
+  const tone = node.provisioning ? "unknown" : nodeStatusMeta(node.status).tone;
 
   return (
     <header className="relative overflow-hidden rounded-xl border border-line-strong bg-surface-1 shadow-sm">
@@ -69,7 +81,7 @@ export function NodeHeader({ node }: { node: NodeDetail }) {
           <div className="flex min-w-0 flex-col gap-3">
             <div className="flex flex-wrap items-center gap-2.5">
               <h1 className="text-2xl font-semibold tracking-tight text-fg">{node.name}</h1>
-              <StatusBadge status={node.status} />
+              <NodeStatusBadge node={node} />
               {node.paused && (
                 <span className="inline-flex h-6 items-center gap-1 rounded-full border border-line-strong px-2.5 text-xs text-fg-muted">
                   <Pause className="size-3" aria-hidden />
@@ -88,7 +100,20 @@ export function NodeHeader({ node }: { node: NodeDetail }) {
                   toastDescription={node.addr}
                 />
               </span>
-              <PinChip nodeKey={node.node_key} fingerprint={node.fingerprint} groups={4} />
+              {node.provisioning ? (
+                <span className="inline-flex h-7 items-center gap-1.5 rounded-sm border border-dashed border-line-strong px-2.5 text-xs text-fg-subtle">
+                  <KeyRound className="size-3.5" aria-hidden />
+                  {t("node.pinPending")}
+                </span>
+              ) : (
+                <PinChip nodeKey={node.node_key} fingerprint={node.fingerprint} groups={4} />
+              )}
+              {node.agent && (
+                <span className="inline-flex h-7 items-center gap-1.5 rounded-sm border border-line bg-surface-2 pr-2.5 pl-1.5 font-mono text-xs text-fg-muted">
+                  <AgentDot node={node} nowSec={now} />
+                  {node.agent.hostname}
+                </span>
+              )}
             </div>
             {cfg && (
               <div className="flex flex-wrap items-center gap-1.5">
@@ -110,7 +135,16 @@ export function NodeHeader({ node }: { node: NodeDetail }) {
             )}
           </div>
           <div className="flex flex-col gap-2 lg:items-end">
-            {canProbe && (
+            {canProbe && node.provisioning && (
+              <Button
+                variant="primary"
+                onClick={() => openInstall({ id: node.id, name: node.name, addr: node.addr })}
+              >
+                <Terminal />
+                {t("node.install")}
+              </Button>
+            )}
+            {canProbe && !node.provisioning && (
               <Button
                 variant="primary"
                 disabled={probe.isPending}

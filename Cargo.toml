@@ -24,9 +24,9 @@ totp-rs = { version = "6.0.0", features = ["otpauth", "gen_secret"] }
 tower-http = { version = "0.7.1", features = ["set-header", "limit", "trace"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
-trust_message_tcp = { git = "https://github.com/Darkildo/trustme_backend", rev = "561d5eb" }
+trust_message_tcp = { git = "https://github.com/Darkildo/trustme_backend", rev = "bf4dfd5" }
 # Протокол агента и каталог лимитов — из тех же исходников, что нода и tmnode.
-tmnode = { git = "https://github.com/Darkildo/trustme_backend", rev = "561d5eb" }
+tmnode = { git = "https://github.com/Darkildo/trustme_backend", rev = "bf4dfd5" }
 ulid = "3.0.0"
 zeroize = "1.9.1"
 russh = { version = "0.64", default-features = false, features = ["aws-lc-rs", "rsa"] }

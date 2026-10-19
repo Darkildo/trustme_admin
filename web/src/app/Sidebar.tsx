@@ -1,7 +1,13 @@
-import { Link } from "@tanstack/react-router";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Link, useRouterState } from "@tanstack/react-router";
+import { Ellipsis, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Logo } from "@/components/Logo";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tooltip } from "@/components/ui/tooltip";
 import { roleAtLeast } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -81,29 +87,65 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
   );
 }
 
+const bottomItemClass =
+  "group flex min-w-0 flex-1 flex-col items-center justify-center gap-1 text-[11px] font-medium text-fg-subtle transition-colors data-[status=active]:text-accent";
+
 export function BottomNav() {
   const { t } = useTranslation();
   const user = useCurrentUser();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const items = NAV_ITEMS.filter((i) => roleAtLeast(user?.role, i.min));
+  const primary = items.filter((i) => i.mobile === "primary");
+  const more = items.filter((i) => i.mobile === "more");
+  const moreActive = more.some((i) => pathname === i.to || pathname.startsWith(`${i.to}/`));
   return (
     <nav
       aria-label={t("nav.main")}
       className="fixed inset-x-0 bottom-0 z-40 flex h-[var(--tm-bottomnav-h)] items-stretch border-t border-line bg-bg-elevated/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
     >
-      {items.map((item) => {
+      {primary.map((item) => {
         const Icon = item.icon;
         return (
           <Link
             key={item.to}
             to={item.to}
             activeOptions={{ exact: item.to === "/" }}
-            className="group flex flex-1 flex-col items-center justify-center gap-1 text-[11px] font-medium text-fg-subtle transition-colors data-[status=active]:text-accent"
+            className={bottomItemClass}
           >
             <Icon className="size-5" aria-hidden />
-            <span className="max-w-full truncate px-1">{t(item.labelKey)}</span>
+            <span className="max-w-full truncate px-1">
+              {t(item.shortLabelKey ?? item.labelKey)}
+            </span>
           </Link>
         );
       })}
+      {more.length > 0 && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              data-status={moreActive ? "active" : undefined}
+              className={bottomItemClass}
+            >
+              <Ellipsis className="size-5" aria-hidden />
+              <span className="max-w-full truncate px-1">{t("nav.more")}</span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" side="top">
+            {more.map((item) => {
+              const Icon = item.icon;
+              return (
+                <DropdownMenuItem key={item.to} asChild>
+                  <Link to={item.to}>
+                    <Icon />
+                    {t(item.labelKey)}
+                  </Link>
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </nav>
   );
 }

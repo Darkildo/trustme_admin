@@ -1,6 +1,7 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import { api, fetchProbesWindow, isApiError } from "./api";
 import { nowSec } from "./format";
+import type { Job } from "./types";
 
 export const REFRESH_MS = 15_000;
 
@@ -13,6 +14,11 @@ export const qk = {
   probes: (id: string, range: string) => ["nodes", id, "probes", range] as const,
   reports: (id: string) => ["nodes", id, "reports"] as const,
   report: (id: string, rid: string) => ["nodes", id, "reports", rid] as const,
+  runtime: (id: string) => ["nodes", id, "runtime"] as const,
+  catalog: ["catalog"] as const,
+  profiles: ["profiles"] as const,
+  turn: ["turn-servers"] as const,
+  job: (id: string) => ["jobs", id] as const,
   users: ["users"] as const,
   audit: ["audit"] as const,
 };
@@ -105,3 +111,49 @@ export const auditQuery = infiniteQueryOptions({
     return last[last.length - 1]?.at;
   },
 });
+
+/** The catalog only changes with the admin binary: fetch once per session. */
+export const catalogQuery = queryOptions({
+  queryKey: qk.catalog,
+  queryFn: () => api.catalog(),
+  staleTime: Infinity,
+});
+
+export const profilesQuery = queryOptions({
+  queryKey: qk.profiles,
+  queryFn: () => api.profiles.list(),
+  staleTime: 30_000,
+});
+
+export const turnServersQuery = queryOptions({
+  queryKey: qk.turn,
+  queryFn: () => api.turn.list(),
+  staleTime: 30_000,
+});
+
+/** Faster refresh while the agent has not applied the current version yet. */
+export const RUNTIME_PENDING_MS = 5_000;
+
+export const runtimeQuery = (id: string) =>
+  queryOptions({
+    queryKey: qk.runtime(id),
+    queryFn: () => api.nodes.runtime(id),
+    refetchInterval: (q) => (q.state.data?.state === "pending" ? RUNTIME_PENDING_MS : REFRESH_MS),
+  });
+
+export const JOB_POLL_MS = 1_500;
+
+/** Keep polling while the job runs (or before the first answer); stop once it finished. */
+export function shouldPollJob(job: Job | undefined, failed = false): boolean {
+  if (failed) return false;
+  return job === undefined || job.status === "running";
+}
+
+export const jobQuery = (id: string) =>
+  queryOptions({
+    queryKey: qk.job(id),
+    queryFn: () => api.jobs.get(id),
+    retry: (count, e) => !isApiError(e, "not_found") && count < 3,
+    refetchInterval: (q) =>
+      shouldPollJob(q.state.data, q.state.status === "error") ? JOB_POLL_MS : false,
+  });
