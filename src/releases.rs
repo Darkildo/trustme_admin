@@ -99,6 +99,17 @@ pub fn image_version(image: &str) -> Option<Version> {
     Version::parse(tag)
 }
 
+/// Тот же образ с тегом версии: `…/trustme_backend:stable` → `…:v0.7.0`.
+pub fn with_version(image: &str, version: Version) -> String {
+    let image = image.split('@').next().unwrap_or(image);
+    let name_start = image.rfind('/').map_or(0, |i| i + 1);
+    let repo = match image[name_start..].find(':') {
+        Some(i) => &image[..name_start + i],
+        None => image,
+    };
+    format!("{repo}:v{version}")
+}
+
 /// `SHA256SUMS` в формате `sha256sum`: `<64 hex>  <имя>` (или ` *<имя>` в
 /// двоичном режиме). Строки не по формату пропускаются.
 pub fn parse_sha256sums(text: &str) -> HashMap<String, String> {
@@ -479,6 +490,16 @@ mod tests {
         );
         assert_eq!(image_version("localhost:5000/trustme_backend"), None);
         assert_eq!(image_version(""), None);
+        let v = Version::new(0, 7, 1);
+        assert_eq!(
+            with_version("ghcr.io/darkildo/trustme_backend:stable", v),
+            "ghcr.io/darkildo/trustme_backend:v0.7.1"
+        );
+        assert_eq!(
+            with_version("localhost:5000/trustme_backend@sha256:abc", v),
+            "localhost:5000/trustme_backend:v0.7.1"
+        );
+        assert_eq!(with_version("trustme", v), "trustme:v0.7.1");
     }
 
     #[test]

@@ -39,8 +39,8 @@ impl Prober for DownProber {
     }
 }
 
-/// v0.7.0 — tmnode под обе архитектуры, v0.6.0 — только x86_64, v0.2.0 —
-/// без tmnode.
+/// v0.7.1 — tmnode только под x86_64, v0.7.0 — под обе архитектуры,
+/// v0.6.0 — только x86_64 (tmnode старой нумерации), v0.2.0 — без tmnode.
 struct FakeReleases;
 
 fn release(version: Version, arches: &[&str]) -> Release {
@@ -58,6 +58,7 @@ impl ReleaseSource for FakeReleases {
     fn releases(&self) -> BoxFuture<'_, anyhow::Result<Vec<Release>>> {
         Box::pin(async {
             Ok(vec![
+                release(Version::new(0, 7, 1), &["x86_64"]),
                 release(Version::new(0, 7, 0), &["x86_64", "aarch64"]),
                 release(Version::new(0, 6, 0), &["x86_64"]),
                 release(Version::new(0, 2, 0), &[]),
@@ -73,10 +74,15 @@ impl ReleaseSource for FakeReleases {
                     sha('7'),
                     sha('a')
                 ),
+                "v0.7.1" => format!("{}  tmnode-x86_64-linux\n", sha('1')),
                 _ => format!("{}  tmnode-x86_64-linux\n", sha('6')),
             })
         })
     }
+}
+
+fn fake_releases() -> Releases {
+    Releases::new("Darkildo/trustme_backend", Arc::new(FakeReleases))
 }
 
 struct Harness {
@@ -87,21 +93,17 @@ struct Harness {
 
 impl Harness {
     async fn new() -> Self {
-        Self::with(Releases::new(
-            "Darkildo/trustme_backend",
-            Arc::new(FakeReleases),
-        ))
-        .await
+        Self::with(fake_releases(), IMAGE_V6).await
     }
 
-    async fn with(releases: Releases) -> Self {
+    async fn with(releases: Releases, image: &str) -> Self {
         let db = db::open_in_memory().await.unwrap();
         let state = AppState::new(
             db.clone(),
             SecretBox::from_key([5u8; 32]),
             Arc::new(DownProber),
         )
-        .with_deployment("https://admin.example.org", IMAGE_V6)
+        .with_deployment("https://admin.example.org", image)
         .with_releases(releases);
         let token = api::ensure_setup_token(&db).await.unwrap().unwrap();
         let mut h = Self {
@@ -240,7 +242,7 @@ fn progress(id: &str, state: &str, step: &str, error: Option<&str>) -> Value {
         "id": id, "state": state, "step": step, "error": error,
         "started_at": 1_792_443_630u64, "finished_at": null,
         "from_node_image": IMAGE_V6, "node_image": if state == "succeeded" { IMAGE_V7 } else { IMAGE_V6 },
-        "from_tmnode": "0.3.0", "tmnode": "0.7.0",
+        "from_tmnode": "0.7.0", "tmnode": "0.7.0",
     })
 }
 
@@ -250,22 +252,22 @@ async fn releases_are_listed_with_tmnode_binaries() {
     let (status, body) = h.call("GET", "/releases", None).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["enabled"], true);
-    assert_eq!(body["latest"], "0.7.0");
+    assert_eq!(body["latest"], "0.7.1");
     assert_eq!(body["repo"], "Darkildo/trustme_backend");
     let releases = body["releases"].as_array().unwrap();
-    assert_eq!(releases.len(), 3);
-    assert_eq!(releases[0]["tag"], "v0.7.0");
-    assert_eq!(releases[0]["published_at"], 1_792_324_800u64);
+    assert_eq!(releases.len(), 4);
+    assert_eq!(releases[1]["tag"], "v0.7.0");
+    assert_eq!(releases[1]["published_at"], 1_792_324_800u64);
     assert_eq!(
-        releases[1]["tmnode"],
+        releases[0]["tmnode"],
         json!({ "x86_64": true, "aarch64": false })
     );
     assert_eq!(
-        releases[2]["tmnode"],
+        releases[3]["tmnode"],
         json!({ "x86_64": false, "aarch64": false })
     );
 
-    let off = Harness::with(Releases::disabled()).await;
+    let off = Harness::with(Releases::disabled(), IMAGE_V6).await;
     let (_, body) = off.call("GET", "/releases", None).await;
     assert_eq!(body["enabled"], false);
     assert!(body["releases"].as_array().unwrap().is_empty());
@@ -275,7 +277,7 @@ async fn releases_are_listed_with_tmnode_binaries() {
 async fn update_runs_through_heartbeats() {
     let h = Harness::new().await;
     let agent = h
-        .managed_node("Берлин", "203.0.113.10", "x86_64", "0.3.0")
+        .managed_node("Берлин", "203.0.113.10", "x86_64", "0.7.0")
         .await;
     let node = &agent.node;
 
@@ -283,7 +285,7 @@ async fn update_runs_through_heartbeats() {
     assert_eq!(view["current"]["node_image"], IMAGE_V6);
     assert_eq!(view["current"]["node_image_source"], "agent");
     assert_eq!(view["current"]["node_version"], "0.6.0");
-    assert_eq!(view["current"]["tmnode_version"], "0.3.0");
+    assert_eq!(view["current"]["tmnode_version"], "0.7.0");
     assert_eq!(view["current"]["supports_updates"], true);
     assert!(view["updates"].as_array().unwrap().is_empty());
 
@@ -406,7 +408,7 @@ fn status_of(id: &str, state: &str, step: &str) -> Value {
 async fn rolled_back_and_refused_are_final() {
     let h = Harness::new().await;
     let agent = h
-        .managed_node("Откат", "203.0.113.11", "x86_64", "0.3.0")
+        .managed_node("Откат", "203.0.113.11", "x86_64", "0.7.0")
         .await;
     let node = &agent.node;
     let path = format!("/nodes/{node}/update");
@@ -473,7 +475,7 @@ async fn rolled_back_and_refused_are_final() {
 async fn cancel_only_while_pending() {
     let h = Harness::new().await;
     let agent = h
-        .managed_node("Отмена", "203.0.113.12", "x86_64", "0.3.0")
+        .managed_node("Отмена", "203.0.113.12", "x86_64", "0.7.0")
         .await;
     let node = &agent.node;
     let (_, body) = h
@@ -545,7 +547,7 @@ async fn cancel_only_while_pending() {
 async fn bad_requests_are_refused() {
     let h = Harness::new().await;
     let agent = h
-        .managed_node("Проверки", "203.0.113.13", "aarch64", "0.3.0")
+        .managed_node("Проверки", "203.0.113.13", "aarch64", "0.7.0")
         .await;
     let node = &agent.node;
     let h = &h;
@@ -564,7 +566,7 @@ async fn bad_requests_are_refused() {
         StatusCode::UNPROCESSABLE_ENTITY,
         "нет такого релиза"
     );
-    let (status, body) = create(node.clone(), json!({ "tmnode_version": "0.6.0" })).await;
+    let (status, body) = create(node.clone(), json!({ "tmnode_version": "0.7.1" })).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
     assert!(
         body["error"]["message"]
@@ -572,11 +574,15 @@ async fn bad_requests_are_refused() {
             .unwrap()
             .contains("aarch64")
     );
-    let (status, _) = create(node.clone(), json!({ "tmnode_version": "0.2.0" })).await;
+    let (status, _) = create(
+        node.clone(),
+        json!({ "tmnode_version": "0.6.0", "allow_downgrade": true }),
+    )
+    .await;
     assert_eq!(
         status,
         StatusCode::UNPROCESSABLE_ENTITY,
-        "агент до 0.3.0 не умеет обновляться"
+        "tmnode до 0.7.0 не умеет обновляться"
     );
     let (status, _) = create(
         node.clone(),
@@ -627,7 +633,7 @@ async fn old_agent_gets_the_upgrade_command() {
     let node = &agent.node;
     let (_, view) = h.call("GET", &format!("/nodes/{node}/updates"), None).await;
     assert_eq!(view["current"]["supports_updates"], false);
-    assert_eq!(view["current"]["min_agent_version"], "0.3.0");
+    assert_eq!(view["current"]["min_agent_version"], "0.7.0");
     assert!(
         view["current"]["agent_upgrade_command"]
             .as_str()
@@ -648,7 +654,7 @@ async fn old_agent_gets_the_upgrade_command() {
         "{message}"
     );
 
-    // Агент до 0.3.0 не присылает node_image: версия ноды — из отчёта.
+    // Агент до 0.7.0 не присылает node_image: версия ноды — из отчёта.
     let report = json!({
         "format": "tmnode.report/1", "tmnode_version": "0.2.0", "generated_at": 1,
         "target": {}, "status": "ok",
@@ -671,7 +677,7 @@ async fn old_agent_gets_the_upgrade_command() {
 async fn silent_agent_loses_the_update() {
     let h = Harness::new().await;
     let agent = h
-        .managed_node("Молчун", "203.0.113.16", "x86_64", "0.3.0")
+        .managed_node("Молчун", "203.0.113.16", "x86_64", "0.7.0")
         .await;
     let node = &agent.node;
     let (_, body) = h
@@ -737,10 +743,10 @@ async fn silent_agent_loses_the_update() {
 async fn foreign_and_unknown_statuses_are_ignored() {
     let h = Harness::new().await;
     let a = h
-        .managed_node("Первая", "203.0.113.17", "x86_64", "0.3.0")
+        .managed_node("Первая", "203.0.113.17", "x86_64", "0.7.0")
         .await;
     let b = h
-        .managed_node("Вторая", "203.0.113.18", "x86_64", "0.3.0")
+        .managed_node("Вторая", "203.0.113.18", "x86_64", "0.7.0")
         .await;
     let (_, body) = h
         .call(
@@ -783,9 +789,9 @@ async fn foreign_and_unknown_statuses_are_ignored() {
 
 #[tokio::test]
 async fn offline_panel_takes_versions_by_hand() {
-    let h = Harness::with(Releases::disabled()).await;
+    let h = Harness::with(Releases::disabled(), IMAGE_V6).await;
     let agent = h
-        .managed_node("Офлайн", "203.0.113.19", "x86_64", "0.3.0")
+        .managed_node("Офлайн", "203.0.113.19", "x86_64", "0.7.0")
         .await;
     let node = &agent.node;
     let (status, body) = h
@@ -825,7 +831,7 @@ async fn offline_panel_takes_versions_by_hand() {
 async fn viewer_sees_but_cannot_update() {
     let h = Harness::new().await;
     let agent = h
-        .managed_node("Наблюдение", "203.0.113.20", "x86_64", "0.3.0")
+        .managed_node("Наблюдение", "203.0.113.20", "x86_64", "0.7.0")
         .await;
     let (_, body) = h
         .call(
@@ -887,4 +893,40 @@ async fn viewer_sees_but_cannot_update() {
         )
         .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn install_pins_the_latest_release() {
+    const STABLE: &str = "ghcr.io/darkildo/trustme_backend:stable";
+    async fn installed_image(h: &Harness) -> Value {
+        let (_, body) = h
+            .call(
+                "POST",
+                "/nodes/provision",
+                Some(json!({ "name": "Новая", "public_host": "203.0.113.30" })),
+            )
+            .await;
+        let token = body["enroll"]["token"].as_str().unwrap();
+        let (status, reply, _) = h
+            .send(
+                "POST",
+                "/agent/enroll",
+                Some(json!({ "token": token, "hostname": "vps", "arch": "x86_64", "tmnode_version": "0.7.0" })),
+                Some("x"),
+            )
+            .await;
+        assert_eq!(status, StatusCode::OK, "{reply}");
+        reply["install"]["image"].clone()
+    }
+    // :stable — тег последнего релиза: версия ноды известна с первого heartbeat.
+    let h = Harness::with(fake_releases(), STABLE).await;
+    assert_eq!(
+        installed_image(&h).await,
+        "ghcr.io/darkildo/trustme_backend:v0.7.1"
+    );
+    // Версионный тег в настройке и офлайн-панель — образ как есть.
+    let h = Harness::with(fake_releases(), IMAGE_V6).await;
+    assert_eq!(installed_image(&h).await, IMAGE_V6);
+    let h = Harness::with(Releases::disabled(), STABLE).await;
+    assert_eq!(installed_image(&h).await, STABLE);
 }

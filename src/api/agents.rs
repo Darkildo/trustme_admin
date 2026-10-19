@@ -376,7 +376,7 @@ pub async fn enroll(
         node_id: node_id.to_ascii_lowercase(),
         node_name: name,
         install: InstallSpec {
-            image: state.node_image.clone(),
+            image: install_image(&state).await,
             public_host: provision.public_host,
             port: provision.port,
             backend: provision.backend,
@@ -384,6 +384,24 @@ pub async fn enroll(
         },
         runtime: Some(runtime),
     }))
+}
+
+/// Образ для новой установки. Тег без версии (`:stable`) панель заменяет
+/// тегом последнего релиза: тогда версия ноды видна с первого heartbeat, а
+/// «доступно обновление» и понижение вычисляются. Версионный тег в настройке,
+/// выключенные или недоступные релизы — образ из настройки как есть.
+async fn install_image(state: &AppState) -> String {
+    let configured = &state.node_image;
+    if !state.releases.enabled() || crate::releases::image_version(configured).is_some() {
+        return configured.clone();
+    }
+    match state.releases.list().await {
+        Ok(list) => list
+            .first()
+            .map(|r| crate::releases::with_version(configured, r.version))
+            .unwrap_or_else(|| configured.clone()),
+        Err(_) => configured.clone(),
+    }
 }
 
 /// `POST /agent/heartbeat` — отчёт, статус настроек и ход обновления от

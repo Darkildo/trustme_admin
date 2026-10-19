@@ -5,7 +5,7 @@
 -- включённых внешних ключах тянет каскады, а историю здесь терять нельзя.
 
 -- Образ, на котором запущен контейнер ноды, из последнего heartbeat
--- (`ghcr.io/darkildo/trustme_backend:v0.7.0`). NULL — агент до 0.3.0 его не
+-- (`ghcr.io/darkildo/trustme_backend:v0.7.0`). NULL — агент до 0.7.0 его не
 -- присылает.
 ALTER TABLE agents ADD COLUMN node_image TEXT;
 

@@ -21,8 +21,10 @@ use crate::error::{ApiError, ApiResult};
 use crate::releases::{ARCHES, Version, image_version};
 use crate::{AppState, new_lower_id, now};
 
-/// С этой версии агент выполняет задания на обновление.
-pub const MIN_AGENT: Version = Version::new(0, 3, 0);
+/// С этой версии агент выполняет задания на обновление. С релиза v0.7.0
+/// версия tmnode совпадает с версией релиза бэкенда; агенты 0.2.x — со своей
+/// прежней нумерацией — ниже порога.
+pub const MIN_AGENT: Version = Version::new(0, 7, 0);
 /// `running`, по которому агент не присылал статуса дольше этого, — `lost`.
 pub const LOST_AFTER_SECS: u64 = 15 * 60;
 /// Сколько заданий показывать в истории ноды.
@@ -31,7 +33,7 @@ const HISTORY_LIMIT: i64 = 50;
 const IMAGE_LIMIT: usize = 256;
 const ERROR_LIMIT: usize = 4000;
 
-/// Команда, которой агент до 0.3.0 обновляют на самом сервере.
+/// Команда, которой агент до 0.7.0 обновляют на самом сервере.
 pub fn agent_upgrade_command() -> String {
     format!("curl -fsSL {INSTALL_SCRIPT} | sudo sh -s -- agent-upgrade")
 }

@@ -21,7 +21,8 @@ pub struct Config {
     pub trust_proxy: bool,
     /// Срок хранения проб, сутки (`TM_ADMIN_PROBE_RETENTION_DAYS`). Default: 14.
     pub probe_retention_days: u64,
-    /// Образ ноды для новых установок (`TM_ADMIN_NODE_IMAGE`).
+    /// Образ ноды для новых установок (`TM_ADMIN_NODE_IMAGE`). Тег без версии
+    /// (`:stable`) при включённых релизах заменяется тегом последнего релиза.
     /// Default: `ghcr.io/darkildo/trustme_backend:stable`.
     pub node_image: String,
     /// Репозиторий релизов бэкенда `владелец/имя` на GitHub — до них панель
