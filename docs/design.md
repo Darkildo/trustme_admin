@@ -61,7 +61,7 @@
 
 - **Примитивы** (`web/src/components/ui/`) — в стиле shadcn/ui поверх Radix
   (`radix-ui`): Button (варианты `primary`, `secondary`, `outline`, `ghost`,
-  `danger`, `danger-outline`, `link`), Input/Textarea, Field (метка + подсказка +
+  `danger`, `danger-outline`, `link`), Input/Textarea, Checkbox, Field (метка + подсказка +
   ошибка с `aria-describedby`), Card, Dialog, AlertDialog, Tabs, Select, Switch,
   DropdownMenu, Tooltip, Segmented (ToggleGroup), Skeleton, Toast (Radix Toast).
 - **Общие** (`web/src/components/`): StatusBadge/StatusIcon/CheckStatusIcon,
@@ -90,6 +90,21 @@
     пользователь не прокрутил вверх, пилюля статуса; опрос `GET /jobs/{id}` раз в
     1,5 с до завершения.
   - `UrlChip` — URL ICE-сервера: схема отдельной ячейкой (`turn:`/`turns:` — акцент).
+- **Обновления** (`features/updates/`):
+  - `VersionChips` — в шапке карточки чипы «нода vX.Y.Z» и «tmnode X.Y.Z»
+    (моноширинно, `surface-2`; подсказка — полный образ и откуда он) и бейдж
+    «Доступно обновление» (`accent-soft`, иконка Sparkles).
+  - `UpdateAction` — кнопка «Обновить» (`secondary`, рядом с «Проверить сейчас») и
+    `UpdateDialog`: выбор версии, галочки частей, предупреждение о перерыве (тон
+    `stale`), понижение — блок `fail` с обязательной галочкой; агенту до 0.3.0 — блок
+    `warn` и `CodeBlock` с командой `agent-upgrade`.
+  - `UpdateBanner` — полоса хода над вкладками, как `ApplyBanner`: тон по состоянию
+    (`pending` → `stale`, `running` → `unknown` со спиннером, `succeeded` → `ok`,
+    `rolled_back`/`refused` → `warn`, `failed`/`lost` → `fail`, `cancelled` → `skip`),
+    шаги `UpdateSteps` пилюлями (готово / идёт / ошибка / пропущен, состояние
+    дублируется иконкой и скрытым текстом), причина моноширинно. Итог висит час,
+    ошибка — сутки.
+  - `UpdateHistory` — карточка на вкладке «История».
 
 ## Правила
 
