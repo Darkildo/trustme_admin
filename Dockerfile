@@ -23,7 +23,11 @@ COPY --from=web /web/dist ./web/dist
 RUN cargo build --release --locked
 
 # 3. Рантайм на той же дистрибуции, что сборка: бинарь слинкован с её glibc.
+# ca-certificates — корни TLS для запросов к GitHub (релизы для обновления нод).
 FROM debian:bookworm-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 RUN useradd -u 10001 -r -m -d /srv/trustme-admin admin \
     && mkdir -p /srv/trustme-admin/data \
     && chown admin:admin /srv/trustme-admin/data

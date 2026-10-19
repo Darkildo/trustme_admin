@@ -6,6 +6,7 @@ use tracing_subscriber::EnvFilter;
 use trustme_admin::config::{Config, Parsed};
 use trustme_admin::crypto::SecretBox;
 use trustme_admin::probe::{NetProber, Prober, spawn_housekeeping, spawn_scheduler};
+use trustme_admin::releases::Releases;
 use trustme_admin::{AppState, api, app, db};
 
 #[tokio::main]
@@ -32,7 +33,14 @@ async fn main() -> Result<()> {
     let prober: Arc<dyn Prober> = Arc::new(NetProber);
     let state = AppState::new(pool.clone(), secrets, prober.clone())
         .with_options(config.secure_cookies(), config.trust_proxy)
-        .with_deployment(&config.public_url, &config.node_image);
+        .with_deployment(&config.public_url, &config.node_image)
+        .with_releases(match &config.releases_repo {
+            Some(repo) => Releases::github(repo)?,
+            None => {
+                tracing::info!("релизы выключены (TM_ADMIN_RELEASES_REPO=off): версии обновлений задаются вручную");
+                Releases::disabled()
+            }
+        });
 
     if let Some(token) = api::ensure_setup_token(&pool).await? {
         // Ссылка одноразовая и живёт сутки: это единственный способ завести

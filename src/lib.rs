@@ -12,6 +12,7 @@ pub mod db;
 pub mod desired;
 pub mod error;
 pub mod probe;
+pub mod releases;
 pub mod ssh;
 pub mod status;
 pub mod web;
@@ -25,6 +26,7 @@ use sqlx::SqlitePool;
 use crate::auth::LoginLimiter;
 use crate::crypto::SecretBox;
 use crate::probe::Prober;
+use crate::releases::Releases;
 
 pub fn now() -> u64 {
     SystemTime::now()
@@ -35,6 +37,11 @@ pub fn now() -> u64 {
 
 pub fn new_id() -> String {
     ulid::Ulid::generate().to_string()
+}
+
+/// ULID строчными — для id, которые уходят агенту `tmnode`.
+pub fn new_lower_id() -> String {
+    new_id().to_ascii_lowercase()
 }
 
 /// Общее состояние обработчиков.
@@ -58,6 +65,9 @@ pub struct Inner {
     pub node_image: String,
     /// Задачи установки по SSH: вывод и итог (только в памяти).
     pub jobs: Mutex<HashMap<String, Job>>,
+    /// Релизы бэкенда для обновления нод. По умолчанию выключены: в GitHub
+    /// ходит только запущенный сервер (`with_releases`), не тесты.
+    pub releases: Arc<Releases>,
 }
 
 /// Задача установки по SSH.
@@ -87,6 +97,7 @@ impl AppState {
             public_url: "http://127.0.0.1:8088".into(),
             node_image: config::DEFAULT_NODE_IMAGE.into(),
             jobs: Mutex::new(HashMap::new()),
+            releases: Arc::new(Releases::disabled()),
         }))
     }
 
@@ -94,6 +105,12 @@ impl AppState {
         let inner = Arc::get_mut(&mut self.0).expect("options are set before sharing the state");
         inner.public_url = public_url.to_owned();
         inner.node_image = node_image.to_owned();
+        self
+    }
+
+    pub fn with_releases(mut self, releases: Releases) -> Self {
+        let inner = Arc::get_mut(&mut self.0).expect("options are set before sharing the state");
+        inner.releases = Arc::new(releases);
         self
     }
 

@@ -287,6 +287,8 @@ export interface AgentInfo {
   hostname: string;
   arch: string;
   tmnode_version: string;
+  /** Образ ноды из последнего heartbeat; null — агент до 0.7.0 его не присылает. */
+  node_image?: string | null;
   enrolled_at: number;
   last_seen_at: number | null;
   online: boolean;
@@ -387,4 +389,81 @@ export interface Job {
   error: string | null;
   started_at: number;
   finished_at: number | null;
+}
+
+/** `GET /releases` — выпущенные версии бэкенда (теги vX.Y.Z без pre-release, новые первыми). */
+export interface Release {
+  version: string;
+  tag: string;
+  published_at: number | null;
+  url: string;
+  /** Есть ли бинарь tmnode (и SHA256SUMS) под архитектуру. */
+  tmnode: Record<string, boolean>;
+}
+
+export interface ReleasesView {
+  /** false — релизы выключены (TM_ADMIN_RELEASES_REPO=off): версии вводятся вручную. */
+  enabled: boolean;
+  repo: string | null;
+  latest: string | null;
+  releases: Release[];
+}
+
+export type UpdateJobState =
+  "pending" | "running" | "succeeded" | "failed" | "rolled_back" | "refused" | "cancelled" | "lost";
+
+export type UpdateStep =
+  "check" | "download_tmnode" | "restart_agent" | "pull_image" | "recreate" | "verify" | "rollback";
+
+/** Задание на обновление ноды и/или агента. */
+export interface NodeUpdate {
+  id: string;
+  node_id: string;
+  node_version: string | null;
+  tmnode_version: string | null;
+  tmnode_sha256: string | null;
+  allow_downgrade: boolean;
+  state: UpdateJobState;
+  step: UpdateStep | null;
+  error: string | null;
+  from_node_image: string | null;
+  to_node_image: string | null;
+  from_tmnode: string | null;
+  to_tmnode: string | null;
+  created_by: string | null;
+  created_at: number;
+  started_at: number | null;
+  finished_at: number | null;
+  reported_at: number | null;
+}
+
+/** Текущие версии ноды и агента. */
+export interface NodeVersions {
+  /** Нода поставлена агентом (не «по адресу и пину»). */
+  managed: boolean;
+  agent: { arch: string; tmnode_version: string } | null;
+  node_image: string | null;
+  node_image_source: "agent" | "report" | null;
+  /** Тег :vX.Y.Z образа; null — тег без версии (stable) или образа нет. */
+  node_version: string | null;
+  tmnode_version: string | null;
+  /** Агент 0.7.0+ — умеет обновляться из панели. */
+  supports_updates: boolean;
+  min_agent_version: string;
+  agent_upgrade_command: string;
+}
+
+/** `GET /nodes/{id}/updates`. */
+export interface NodeUpdatesView {
+  current: NodeVersions;
+  /** Новые первыми. */
+  updates: NodeUpdate[];
+}
+
+export interface StartUpdateInput {
+  node_version?: string;
+  tmnode_version?: string;
+  /** Только когда релизы выключены. */
+  tmnode_sha256?: string;
+  allow_downgrade?: boolean;
 }

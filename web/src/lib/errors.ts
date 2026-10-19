@@ -8,6 +8,7 @@ export function errorMessage(e: unknown, t: TFunction): string {
       case "invalid_input":
       case "conflict":
       case "unprocessable":
+      case "unavailable":
         return t(`errors.${e.code}`, { message: e.message });
       case "rate_limited":
         return e.retryAfter !== null

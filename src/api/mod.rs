@@ -9,6 +9,7 @@ mod limits;
 mod nodes;
 mod overview;
 mod setup;
+mod updates;
 mod users;
 
 use axum::Json;
@@ -24,6 +25,7 @@ use crate::error::ApiError;
 
 pub use agents::INSTALL_SCRIPT;
 pub use setup::ensure_setup_token;
+pub use updates::{LOST_AFTER_SECS, mark_lost};
 
 /// Предел тела обычного запроса.
 const BODY_LIMIT: usize = 64 * 1024;
@@ -84,6 +86,10 @@ pub fn router(_state: AppState) -> Router<AppState> {
             get(blob_reserve::view).post(blob_reserve::apply),
         )
         .route("/nodes/{id}/ssh-install", post(agents::ssh_install))
+        .route("/releases", get(updates::releases))
+        .route("/nodes/{id}/update", post(updates::create))
+        .route("/nodes/{id}/updates", get(updates::history))
+        .route("/nodes/{id}/updates/{uid}/cancel", post(updates::cancel))
         .route("/jobs/{id}", get(agents::job))
         .route("/agent/enroll", post(agents::enroll))
         .route(

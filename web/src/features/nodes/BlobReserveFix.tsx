@@ -53,7 +53,7 @@ export function BlobReserveFix({
     onError: (e) => toast.error(errorMessage(e, t)),
   });
 
-  const action = blobReserveAction(check.status, data, canAdmin);
+  const action = blobReserveAction(check.status, data, canAdmin, check.data);
 
   if (action.kind === "no_agent") {
     return (
@@ -69,7 +69,10 @@ export function BlobReserveFix({
   if (action.kind === "lowered") {
     return (
       <Note tone="ok" icon={CircleCheck}>
-        {t("blobReserve.lowered", { panel: size(action.panel), reserve: size(action.reserve) })}
+        {t(action.legacy ? "blobReserve.loweredLegacy" : "blobReserve.lowered", {
+          panel: size(action.panel),
+          reserve: size(action.reserve),
+        })}
       </Note>
     );
   }

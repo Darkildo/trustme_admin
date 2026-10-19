@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { probesQuery, reportsQuery, type HistoryRange } from "@/lib/queries";
 import type { Probe } from "@/lib/types";
+import { UpdateHistory } from "@/features/updates/UpdateHistory";
 import { CountsBar } from "./CheckGroups";
 import { ReportDialog } from "./ReportDialog";
 
@@ -215,6 +216,8 @@ export function HistoryTab({ nodeId }: { nodeId: string }) {
           )}
         </CardContent>
       </Card>
+
+      <UpdateHistory nodeId={nodeId} />
 
       <ReportDialog nodeId={nodeId} reportId={openReport} onClose={() => setOpenReport(null)} />
     </div>

@@ -31,6 +31,10 @@ import type {
   Job,
   NodeRuntime,
   EnrollInfo,
+  NodeUpdate,
+  NodeUpdatesView,
+  ReleasesView,
+  UpdateStep,
   User,
 } from "./types";
 
@@ -178,6 +182,11 @@ interface MockNode {
   /** GET /nodes/{id} polls counted since the install command was issued; null — not counting. */
   enrollPolls: number | null;
   flipAfter: number;
+  // ---- обновления ----
+  /** Образ ноды из heartbeat; null — агент до 0.7.0 его не присылает. */
+  nodeImage: string | null;
+  /** Задания на обновление, новые первыми. */
+  updates: NodeUpdate[];
 }
 
 const CONFIG: ProbeConfig = {
@@ -396,6 +405,8 @@ function mkNode(
     restartQueued: [],
     enrollPolls: null,
     flipAfter: 8,
+    nodeImage: null,
+    updates: [],
     ...extra,
   };
   if (scenario !== "new" && scenario !== "created" && scenario !== "provisioning") {
@@ -600,6 +611,71 @@ const turnServers: MockTurn[] = [
   },
 ];
 
+// ---------- релизы и обновления ----------
+
+const IMAGE_REPO = "ghcr.io/darkildo/trustme_backend";
+
+const RELEASES: ReleasesView = {
+  enabled: true,
+  repo: "Darkildo/trustme_backend",
+  latest: "0.7.1",
+  releases: [
+    {
+      version: "0.7.1",
+      tag: "v0.7.1",
+      published_at: T0 - 3 * DAY,
+      url: "",
+      tmnode: { x86_64: true, aarch64: true },
+    },
+    {
+      version: "0.7.0",
+      tag: "v0.7.0",
+      published_at: T0 - 20 * DAY,
+      url: "",
+      tmnode: { x86_64: true, aarch64: true },
+    },
+    {
+      version: "0.6.0",
+      tag: "v0.6.0",
+      published_at: T0 - 45 * DAY,
+      url: "",
+      tmnode: { x86_64: true, aarch64: false },
+    },
+  ],
+};
+
+function pastUpdate(
+  nodeSeed: number,
+  seed: number,
+  state: NodeUpdate["state"],
+  step: UpdateStep,
+  to: string,
+  from: string,
+  p: { error?: string; finishedAgo: number },
+): NodeUpdate {
+  const finished = T0 - p.finishedAgo;
+  return {
+    id: ulid(9500 + seed).toLowerCase(),
+    node_id: ulid(100 + nodeSeed),
+    node_version: to,
+    tmnode_version: to,
+    tmnode_sha256: "7".repeat(64),
+    allow_downgrade: false,
+    state,
+    step,
+    error: p.error ?? null,
+    from_node_image: `${IMAGE_REPO}:v${from}`,
+    to_node_image: `${IMAGE_REPO}:v${state === "succeeded" ? to : from}`,
+    from_tmnode: from,
+    to_tmnode: state === "succeeded" || state === "rolled_back" ? to : from,
+    created_by: "alice",
+    created_at: finished - 140,
+    started_at: finished - 110,
+    finished_at: finished,
+    reported_at: finished,
+  };
+}
+
 const liveAgent = (hostname: string, arch = "x86_64", version = "0.5.0"): MockAgent => ({
   hostname,
   arch,
@@ -621,7 +697,8 @@ const nodes: MockNode[] = [
       profileId: ulid(9002),
       overrides: { limit_max_connections: 30_000 },
       turnIds: [ulid(9101), ulid(9102), ulid(9103)],
-      agent: liveAgent("msk-1"),
+      agent: liveAgent("msk-1", "x86_64", "0.7.0"),
+      nodeImage: `${IMAGE_REPO}:v0.7.0`,
       provision: {
         public_host: "msk-1.trustme.example",
         port: 7443,
@@ -644,7 +721,7 @@ const nodes: MockNode[] = [
       baseLatency: 64,
       overrides: { blob_get_window_bytes: 4 * MIB, blob_chunk_max_bytes: 8 * MIB },
       turnIds: [ulid(9102)],
-      agent: liveAgent("fra-edge", "aarch64", "0.4.2"),
+      agent: liveAgent("fra-edge", "aarch64", "0.2.0"),
       provision: {
         public_host: "fra.trustme.example",
         port: 7443,
@@ -668,7 +745,19 @@ const nodes: MockNode[] = [
     {
       profileId: ulid(9002),
       turnIds: [ulid(9102), ulid(9103)],
-      agent: { ...liveAgent("ams-relay"), live: false, last_seen_at: T0 - 2.6 * 3600 },
+      agent: {
+        ...liveAgent("ams-relay", "x86_64", "0.7.0"),
+        live: false,
+        last_seen_at: T0 - 2.6 * 3600,
+      },
+      nodeImage: `${IMAGE_REPO}:v0.7.0`,
+      updates: [
+        pastUpdate(3, 1, "rolled_back", "rollback", "0.7.1", "0.7.0", {
+          error:
+            "проверка новой ноды не прошла: endpoint.handshake — тайм-аут 5 с\n--- docker logs message-service (хвост) ---\nError: storage: unsupported sled format 3",
+          finishedAgo: 3 * 3600,
+        }),
+      ],
       provision: { public_host: "203.0.113.24", port: 7443, backend: "sled", with_turn: false },
       desiredRev: 3,
       desiredAt: T0 - 1800,
@@ -694,7 +783,16 @@ const nodes: MockNode[] = [
       baseLatency: 27,
       overrides: { blob_chunk_max_bytes: 2 * MIB, device_cert_max_ttl_seconds: 7 * DAY },
       turnIds: [ulid(9103)],
-      agent: liveAgent("spb-2.internal"),
+      agent: liveAgent("spb-2.internal", "x86_64", "0.7.1"),
+      nodeImage: `${IMAGE_REPO}:v0.7.1`,
+      updates: [
+        pastUpdate(5, 2, "succeeded", "verify", "0.7.1", "0.7.0", { finishedAgo: 2 * DAY }),
+        pastUpdate(5, 3, "refused", "check", "0.7.0", "0.6.0", {
+          error:
+            'в node.toml updates.channel = "pinned", а версия 0.7.0 не совпадает с updates.version = 0.6.0',
+          finishedAgo: 6 * DAY,
+        }),
+      ],
       provision: { public_host: "2001:db8::42", port: 7443, backend: "sled", with_turn: false },
       desiredRev: 2,
       desiredAt: T0 - 2 * 3600,
@@ -914,6 +1012,7 @@ function runtimeView(node: MockNode): NodeRuntime {
         hostname: node.agent.hostname,
         arch: node.agent.arch,
         tmnode_version: node.agent.tmnode_version,
+        node_image: node.nodeImage,
         enrolled_at: node.agent.enrolled_at,
         last_seen_at: agentSeen(node.agent),
         online: agentOnline(node.agent),
@@ -955,6 +1054,153 @@ function runtimeView(node: MockNode): NodeRuntime {
     applied,
     state,
   };
+}
+
+// ---------- ход обновления ----------
+
+const MIN_AGENT = "0.7.0";
+const UPDATE_WAIT = 4;
+const UPDATE_STEP_SECS = 3;
+
+function cmpVersion(a: string, b: string): number {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) if (pa[i] !== pb[i]) return (pa[i] ?? 0) - (pb[i] ?? 0);
+  return 0;
+}
+
+function nodeVersionOf(node: MockNode): string | null {
+  const m = /:v(\d+\.\d+\.\d+)$/.exec(node.nodeImage ?? "");
+  return m ? m[1]! : null;
+}
+
+function updateSteps(u: NodeUpdate): UpdateStep[] {
+  const steps: UpdateStep[] = ["check"];
+  if (u.tmnode_version) steps.push("download_tmnode", "restart_agent");
+  if (u.node_version) steps.push("pull_image", "recreate", "verify");
+  return steps;
+}
+
+/** Агент «выполняет» задание по часам: ждёт heartbeat, затем шаг каждые 3 с. */
+function advanceUpdate(node: MockNode) {
+  const u = node.updates[0];
+  if (!u || (u.state !== "pending" && u.state !== "running") || !node.agent?.live) return;
+  const elapsed = now() - u.created_at - UPDATE_WAIT;
+  if (elapsed < 0) return;
+  const steps = updateSteps(u);
+  const i = Math.floor(elapsed / UPDATE_STEP_SECS);
+  if (u.state === "pending") {
+    u.state = "running";
+    u.started_at = u.created_at + UPDATE_WAIT;
+    u.from_node_image = node.nodeImage;
+    u.from_tmnode = node.agent.tmnode_version;
+  }
+  u.reported_at = now();
+  if (i < steps.length) {
+    u.step = steps[i]!;
+    return;
+  }
+  u.finished_at = now();
+  if (node.name.startsWith("ams") && u.node_version) {
+    u.state = "rolled_back";
+    u.step = "rollback";
+    u.error = "проверка новой ноды не прошла: endpoint.handshake — тайм-аут 5 с";
+    u.to_node_image = node.nodeImage;
+  } else {
+    u.state = "succeeded";
+    u.step = steps[steps.length - 1]!;
+    if (u.node_version) node.nodeImage = `${IMAGE_REPO}:v${u.node_version}`;
+    if (u.tmnode_version) node.agent.tmnode_version = u.tmnode_version;
+    u.to_node_image = node.nodeImage;
+  }
+  u.to_tmnode = node.agent.tmnode_version;
+  addAudit("node.update_finished", node.name, { update_id: u.id, state: u.state });
+}
+
+function updatesView(node: MockNode): NodeUpdatesView {
+  advanceUpdate(node);
+  const agentVersion = node.agent?.tmnode_version ?? null;
+  return {
+    current: {
+      managed: node.provision !== null,
+      agent: node.agent
+        ? { arch: node.agent.arch, tmnode_version: node.agent.tmnode_version }
+        : null,
+      node_image: node.nodeImage,
+      node_image_source: node.nodeImage ? "agent" : null,
+      node_version: nodeVersionOf(node),
+      tmnode_version: agentVersion,
+      supports_updates:
+        node.provision !== null &&
+        agentVersion !== null &&
+        cmpVersion(agentVersion, MIN_AGENT) >= 0,
+      min_agent_version: MIN_AGENT,
+      agent_upgrade_command:
+        "curl -fsSL https://raw.githubusercontent.com/Darkildo/trustme_backend/stable/deploy/install.sh | sudo sh -s -- agent-upgrade",
+    },
+    updates: node.updates.map((u) => ({ ...u })),
+  };
+}
+
+function startUpdate(node: MockNode, body: Record<string, unknown>): Response {
+  const view = updatesView(node);
+  if (!view.current.managed)
+    return err(409, "conflict", "нода добавлена по адресу и пину: обновляют её на сервере");
+  if (!node.agent) return err(409, "conflict", "агент tmnode ещё не подключился");
+  if (!view.current.supports_updates)
+    return err(
+      409,
+      "conflict",
+      `агент tmnode ${node.agent.tmnode_version} не умеет обновляться из панели (нужен ${MIN_AGENT})`,
+    );
+  const clean = (v: unknown) =>
+    typeof v === "string" && v.trim() ? v.trim().replace(/^v/, "") : null;
+  const nodeVersion = clean(body.node_version);
+  const tmnodeVersion = clean(body.tmnode_version);
+  if (!nodeVersion && !tmnodeVersion)
+    return err(400, "invalid_input", "нужна node_version, tmnode_version или обе");
+  const release = RELEASES.releases.find((r) => r.version === (nodeVersion ?? tmnodeVersion));
+  if (!release) return err(422, "unprocessable", "такого релиза нет");
+  if (tmnodeVersion && !release.tmnode[node.agent.arch])
+    return err(422, "unprocessable", `в релизе ${release.tag} нет tmnode под ${node.agent.arch}`);
+  const current = nodeVersionOf(node);
+  const lower =
+    (nodeVersion && current && cmpVersion(nodeVersion, current) < 0) ||
+    (tmnodeVersion && cmpVersion(tmnodeVersion, node.agent.tmnode_version) < 0);
+  if (lower && body.allow_downgrade !== true)
+    return err(422, "unprocessable", "понижение — только с allow_downgrade");
+  if (
+    view.updates[0] &&
+    (view.updates[0].state === "pending" || view.updates[0].state === "running")
+  )
+    return err(409, "conflict", "у ноды уже есть незавершённое обновление");
+  const u: NodeUpdate = {
+    id: ulid().toLowerCase(),
+    node_id: node.id,
+    node_version: nodeVersion,
+    tmnode_version: tmnodeVersion,
+    tmnode_sha256: tmnodeVersion ? "7".repeat(64) : null,
+    allow_downgrade: body.allow_downgrade === true,
+    state: "pending",
+    step: null,
+    error: null,
+    from_node_image: null,
+    to_node_image: null,
+    from_tmnode: null,
+    to_tmnode: null,
+    created_by: me()?.username ?? null,
+    created_at: now(),
+    started_at: null,
+    finished_at: null,
+    reported_at: null,
+  };
+  node.updates.unshift(u);
+  addAudit("node.update_created", node.name, {
+    update_id: u.id,
+    node_version: nodeVersion,
+    tmnode_version: tmnodeVersion,
+  });
+  return json(201, { update: u });
 }
 
 // ---------- резерв диска под файлы ----------
@@ -1057,11 +1303,13 @@ function enrollNode(node: MockNode) {
   node.agent = {
     hostname: node.name,
     arch: "x86_64",
-    tmnode_version: "0.5.0",
+    tmnode_version: "0.7.1",
     enrolled_at: now(),
     live: true,
     last_seen_at: now(),
   };
+  // Панель ставит ноду с тегом последнего релиза вместо :stable.
+  node.nodeImage = `${IMAGE_REPO}:v${RELEASES.latest}`;
   node.desiredRev++;
   node.desiredAt = now();
   if (node.provision?.with_turn) {
@@ -1454,6 +1702,7 @@ export async function mockFetch(method: string, path: string, rawBody?: string):
       nodes: [...nodes].sort((a, b) => a.name.localeCompare(b.name)).map(listItem),
     });
   if (route === "GET /catalog") return json(200, { settings: CATALOG });
+  if (route === "GET /releases") return json(200, RELEASES);
 
   if (route === "GET /profiles") {
     const def = defaultProfile();
@@ -1694,6 +1943,30 @@ export async function mockFetch(method: string, path: string, rawBody?: string):
       return json(200, { node: detail(node) });
     }
     if (method === "GET" && sub === "/runtime") return json(200, runtimeView(node));
+    if (method === "GET" && sub === "/updates") return json(200, updatesView(node));
+    if (method === "POST" && sub === "/update") {
+      if (!isAdmin) return forbidden();
+      return startUpdate(node, body);
+    }
+    const cm = sub.match(/^\/updates\/([^/]+)\/cancel$/);
+    if (method === "POST" && cm) {
+      if (!isAdmin) return forbidden();
+      advanceUpdate(node);
+      const u = node.updates.find((x) => x.id === cm[1]!.toLowerCase());
+      if (!u) return err(404, "not_found", "не найдено");
+      if (u.state !== "pending")
+        return err(
+          409,
+          "conflict",
+          u.state === "running"
+            ? "агент уже начал обновление — отменить его нельзя"
+            : `задание уже завершено (${u.state})`,
+        );
+      u.state = "cancelled";
+      u.finished_at = now();
+      addAudit("node.update_cancelled", node.name, { update_id: u.id });
+      return json(200, { update: { ...u } });
+    }
     if (method === "GET" && sub === "/blob-reserve") return json(200, blobReserveView(node));
     if (method === "POST" && sub === "/blob-reserve") {
       if (!isAdmin) return forbidden();

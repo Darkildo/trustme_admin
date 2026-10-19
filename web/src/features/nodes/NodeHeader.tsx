@@ -18,6 +18,7 @@ import { CopyButton } from "@/components/CopyButton";
 import { AgentDot, NodeStatusBadge } from "@/components/NodeBadges";
 import { PinChip } from "@/components/PinChip";
 import { Button } from "@/components/ui/button";
+import { UpdateAction, VersionChips } from "@/features/updates/NodeVersions";
 import { formatBytes, formatDateTime, formatMs, formatRelative } from "@/lib/format";
 import { nodeStatusMeta } from "@/lib/status";
 import { TONE_CLASSES } from "@/lib/tone";
@@ -115,6 +116,7 @@ export function NodeHeader({ node }: { node: NodeDetail }) {
                 </span>
               )}
             </div>
+            <VersionChips node={node} />
             {cfg && (
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="inline-flex h-6 items-center gap-1 rounded-full bg-gradient-brand px-2.5 font-mono text-[11px] font-semibold text-accent-fg">
@@ -135,25 +137,28 @@ export function NodeHeader({ node }: { node: NodeDetail }) {
             )}
           </div>
           <div className="flex flex-col gap-2 lg:items-end">
-            {canProbe && node.provisioning && (
-              <Button
-                variant="primary"
-                onClick={() => openInstall({ id: node.id, name: node.name, addr: node.addr })}
-              >
-                <Terminal />
-                {t("node.install")}
-              </Button>
-            )}
-            {canProbe && !node.provisioning && (
-              <Button
-                variant="primary"
-                disabled={probe.isPending}
-                onClick={() => probe.mutate({ id: node.id, name: node.name })}
-              >
-                {probe.isPending ? <RefreshCw className="animate-spin" /> : <Zap />}
-                {probe.isPending ? t("node.probing") : t("node.probeNow")}
-              </Button>
-            )}
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              {canProbe && node.provisioning && (
+                <Button
+                  variant="primary"
+                  onClick={() => openInstall({ id: node.id, name: node.name, addr: node.addr })}
+                >
+                  <Terminal />
+                  {t("node.install")}
+                </Button>
+              )}
+              {canProbe && !node.provisioning && (
+                <Button
+                  variant="primary"
+                  disabled={probe.isPending}
+                  onClick={() => probe.mutate({ id: node.id, name: node.name })}
+                >
+                  {probe.isPending ? <RefreshCw className="animate-spin" /> : <Zap />}
+                  {probe.isPending ? t("node.probing") : t("node.probeNow")}
+                </Button>
+              )}
+              {!node.provisioning && <UpdateAction node={node} />}
+            </div>
             <p className="text-xs text-fg-subtle tabular">
               {node.last_probe
                 ? `${t("node.lastProbeAgo", { ago: formatRelative(node.last_probe.at, i18n.language, now) })} · ${t("checks.handshakeMs")} ${formatMs(node.last_probe.handshake_ms)}`
