@@ -4389,7 +4389,7 @@ dependencies = [
  "sha2 0.11.1",
  "tokio",
  "toml",
- "trust_message_tcp",
+ "trust_message_tcp 0.8.0",
  "zeroize",
 ]
 
@@ -4776,6 +4776,51 @@ dependencies = [
 ]
 
 [[package]]
+name = "trust_message_tcp"
+version = "0.8.1"
+source = "git+https://github.com/Darkildo/trustme_backend?tag=v0.8.1#76fd8da7321baffb24f8b4724ef3a4dc39507edd"
+dependencies = [
+ "anyhow",
+ "async-nats",
+ "base64 0.22.1",
+ "bytes",
+ "config",
+ "curve25519-dalek 5.0.0",
+ "dashmap",
+ "ed25519-dalek 3.0.0",
+ "fs2",
+ "futures-util",
+ "getrandom 0.4.3",
+ "hex",
+ "hmac",
+ "jsonwebtoken",
+ "metrics",
+ "metrics-exporter-prometheus",
+ "prost",
+ "prost-build",
+ "protox",
+ "reqwest",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha1",
+ "sha2 0.11.1",
+ "sled",
+ "snow",
+ "socket2",
+ "subtle",
+ "tokio",
+ "tokio-util",
+ "toml",
+ "tonic",
+ "tonic-prost",
+ "tonic-prost-build",
+ "tracing",
+ "tracing-subscriber",
+ "zeroize",
+]
+
+[[package]]
 name = "trustme-admin"
 version = "0.3.0"
 dependencies = [
@@ -4804,7 +4849,7 @@ dependencies = [
  "tower-http 0.7.1",
  "tracing",
  "tracing-subscriber",
- "trust_message_tcp",
+ "trust_message_tcp 0.8.1",
  "ulid",
  "zeroize",
 ]
