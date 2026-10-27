@@ -11,7 +11,7 @@ RUN pnpm build
 
 # 2. Сервер. build-essential, cmake и perl нужны aws-lc-sys: его тянет
 # зависимость trust_message_tcp (rustls), Rust их не требует.
-FROM rust:1.97-slim-bookworm AS server
+FROM rust:1.99-slim-bookworm AS server
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential cmake perl pkg-config git \
     && rm -rf /var/lib/apt/lists/*
